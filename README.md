@@ -3,6 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/m3u8.svg)](https://crates.io/crates/m3u8)
 [![Documentation](https://docs.rs/m3u8/badge.svg)](https://docs.rs/m3u8)
 [![check](https://github.com/includeamin/m3u8-parser/actions/workflows/rust.yml/badge.svg)](https://github.com/includeamin/m3u8-parser/actions/workflows/rust.yml)
+
 A Rust crate for parsing and creating M3U8 version 7 files for HTTP Live Streaming (HLS), as specified
 by [RFC 8216](https://tools.ietf.org/html/rfc8216).
 
