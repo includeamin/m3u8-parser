@@ -10,3 +10,7 @@ repository = "https://github.com/includeamin/m3u8-parser"
 readme = "README.md"
 
 [dependencies]
+
+
+[package.metadata.clippy]
+allow = ["clippy::too_many_arguments"]

@@ -186,6 +186,136 @@ pub mod m3u8_parser {
         }
     }
 
+    /// A builder for creating a `Playlist` with a chained interface.
+    pub struct PlaylistBuilder {
+        tags: Vec<Tag>,
+    }
+
+    impl Default for PlaylistBuilder {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl PlaylistBuilder {
+        /// Creates a new `PlaylistBuilder`.
+        pub fn new() -> Self {
+            Self { tags: Vec::new() }
+        }
+
+        /// Adds an `ExtM3U` tag.
+        pub fn extm3u(mut self) -> Self {
+            self.tags.push(Tag::ExtM3U);
+            self
+        }
+
+        /// Adds an `ExtXVersion` tag.
+        pub fn version(mut self, version: u8) -> Self {
+            self.tags.push(Tag::ExtXVersion(version));
+            self
+        }
+
+        /// Adds an `ExtInf` tag.
+        pub fn extinf(mut self, duration: f32, title: Option<String>) -> Self {
+            self.tags.push(Tag::ExtInf(duration, title));
+            self
+        }
+
+        /// Adds an `ExtXTargetDuration` tag.
+        pub fn target_duration(mut self, duration: u32) -> Self {
+            self.tags.push(Tag::ExtXTargetDuration(duration));
+            self
+        }
+
+        /// Adds an `ExtXMediaSequence` tag.
+        pub fn media_sequence(mut self, sequence: u64) -> Self {
+            self.tags.push(Tag::ExtXMediaSequence(sequence));
+            self
+        }
+
+        /// Adds an `ExtXDiscontinuitySequence` tag.
+        pub fn discontinuity_sequence(mut self, sequence: u32) -> Self {
+            self.tags.push(Tag::ExtXDiscontinuitySequence(sequence));
+            self
+        }
+
+        /// Adds an `ExtXEndList` tag.
+        pub fn end_list(mut self) -> Self {
+            self.tags.push(Tag::ExtXEndList);
+            self
+        }
+
+        /// Adds an `ExtXKey` tag.
+        pub fn key(
+            mut self,
+            method: String,
+            uri: Option<String>,
+            iv: Option<String>,
+            keyformat: Option<String>,
+            keyformatversions: Option<String>,
+        ) -> Self {
+            self.tags.push(Tag::ExtXKey {
+                method,
+                uri,
+                iv,
+                keyformat,
+                keyformatversions,
+            });
+            self
+        }
+
+        /// Adds an `ExtXMap` tag.
+        pub fn map(mut self, uri: String, byterange: Option<String>) -> Self {
+            self.tags.push(Tag::ExtXMap { uri, byterange });
+            self
+        }
+
+        /// Adds an `ExtXProgramDateTime` tag.
+        pub fn program_date_time(mut self, date_time: String) -> Self {
+            self.tags.push(Tag::ExtXProgramDateTime(date_time));
+            self
+        }
+
+        /// Adds an `ExtXDateRange` tag.
+        #[allow(clippy::too_many_arguments)]
+        pub fn date_range(
+            mut self,
+            id: String,
+            start_date: String,
+            end_date: Option<String>,
+            duration: Option<f32>,
+            planned_duration: Option<f32>,
+            scte35_cmd: Option<String>,
+            scte35_out: Option<String>,
+            scte35_in: Option<String>,
+            end_on_next: Option<bool>,
+        ) -> Self {
+            self.tags.push(Tag::ExtXDateRange {
+                id,
+                start_date,
+                end_date,
+                duration,
+                planned_duration,
+                scte35_cmd,
+                scte35_out,
+                scte35_in,
+                end_on_next,
+            });
+            self
+        }
+
+        /// Adds a `Uri` tag.
+        pub fn uri(mut self, uri: String) -> Self {
+            self.tags.push(Tag::Uri(uri));
+            self
+        }
+
+        /// Builds the `Playlist`.
+        pub fn build(self) -> Playlist {
+            Playlist { tags: self.tags }
+        }
+    }
+
     /// Parses attributes from a given input string and returns a map of key-value pairs.
     ///
     /// # Arguments
@@ -320,7 +450,7 @@ pub mod m3u8_parser {
 
 #[cfg(test)]
 mod tests {
-    use super::m3u8_parser::{Playlist, Tag};
+    use super::m3u8_parser::{Playlist, PlaylistBuilder, Tag};
     use std::io::Write;
 
     #[test]
@@ -720,6 +850,58 @@ https://media.example.com/third.ts
 #EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXT-X-DATERANGE:ID=\"ad-break\",START-DATE=\"2020-01-01T00:00:00Z\",DURATION=60.6
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
+#EXTINF:3.003,
+https://media.example.com/third.ts
+#EXT-X-ENDLIST
+";
+
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_playlist_builder() {
+        let playlist = PlaylistBuilder::new()
+            .extm3u()
+            .version(3)
+            .target_duration(10)
+            .extinf(5.005, None)
+            .uri("https://media.example.com/first.ts".to_string())
+            .extinf(5.005, None)
+            .uri("https://media.example.com/second.ts".to_string())
+            .extinf(3.003, None)
+            .uri("https://media.example.com/third.ts".to_string())
+            .end_list()
+            .build();
+
+        assert_eq!(
+            playlist.tags,
+            vec![
+                Tag::ExtM3U,
+                Tag::ExtXVersion(3),
+                Tag::ExtXTargetDuration(10),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(3.003, None),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtXEndList,
+            ]
+        );
+
+        let mut output = Vec::new();
+        for tag in &playlist.tags {
+            writeln!(output, "{}", tag).unwrap();
+        }
+        let output = String::from_utf8(output).unwrap();
+
+        let expected = "#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
 #EXTINF:5.005,
 https://media.example.com/first.ts
 #EXTINF:5.005,
