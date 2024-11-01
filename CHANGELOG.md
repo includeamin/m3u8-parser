@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+### ⚙️ Miscellaneous Tasks
+
+- Add a Note about the status of the project
+
+## [0.3.0] - 2024-11-01
+
 ### 🚀 Features
 
 - Add `PlaylistBuilder`

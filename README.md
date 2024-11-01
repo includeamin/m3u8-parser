@@ -7,6 +7,9 @@
 A Rust crate for parsing and creating M3U8 version 7 files for HTTP Live Streaming (HLS), as specified
 by [RFC 8216](https://tools.ietf.org/html/rfc8216).
 
+> [!IMPORTANT]
+> This project is under active development. Features and APIs may change.
+
 ## Features
 
 - Parse M3U8 playlists from strings, files, or readers
