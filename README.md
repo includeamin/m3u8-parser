@@ -25,7 +25,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-m3u8-parser = "0.2.0"
+m3u8-parser = "0.3.0"
 ```
 
 ## Usage
@@ -72,6 +72,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     playlist.tags.push(Tag::ExtInf(3.003, None));
     playlist.tags.push(Tag::Uri("https://media.example.com/third.ts".to_string()));
     playlist.tags.push(Tag::ExtXEndList);
+
+    playlist.write_to_file("playlist.m3u8")?;
+    Ok(())
+}
+```
+
+
+### Using PlaylistBuilder
+
+```rust
+use m3u8_parser::PlaylistBuilder;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let playlist = PlaylistBuilder::new()
+        .extm3u()
+        .version(7)
+        .target_duration(6)
+        .extinf(5.009, None)
+        .uri("https://media.example.com/first.ts".to_string())
+        .extinf(5.009, None)
+        .uri("https://media.example.com/second.ts".to_string())
+        .extinf(3.003, None)
+        .uri("https://media.example.com/third.ts".to_string())
+        .end_list()
+        .build();
 
     playlist.write_to_file("playlist.m3u8")?;
     Ok(())
