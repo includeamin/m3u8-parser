@@ -1,1 +1,24 @@
-/target
+# Compiled output
+/target/
+
+# Cargo files
+/Cargo.lock
+/Cargo.toml
+
+# Optional files
+/.cargo/registry/*
+!.cargo/registry/index/*
+!.cargo/registry/cache/*
+
+# Backup files
+*~
+*.rs.bk
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment variables
+.env
