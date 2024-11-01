@@ -23,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-m3u8 = "0.1.0"
+m3u8-parser = "0.2.0"
 ```
 
 

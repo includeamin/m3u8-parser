@@ -1,5 +1,5 @@
 /// A module for handling M3U8 playlists, including parsing and generating playlist tags.
-pub mod m3u8 {
+pub mod m3u8_parser {
     use std::fs::File;
     use std::io;
     use std::io::BufRead;
@@ -320,7 +320,7 @@ pub mod m3u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::m3u8::{Playlist, Tag};
+    use super::m3u8_parser::{Playlist, Tag};
     use std::io::Write;
 
     #[test]
