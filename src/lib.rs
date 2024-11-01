@@ -329,12 +329,12 @@ mod tests {
 #EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:10
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -345,12 +345,12 @@ http://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(3),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ]
         );
@@ -363,12 +363,12 @@ http://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(3),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ],
         };
@@ -382,12 +382,12 @@ http://media.example.com/third.ts
         let expected = "#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:10
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 ";
 
@@ -401,12 +401,12 @@ http://media.example.com/third.ts
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:10
 #EXT-X-KEY:METHOD=AES-128,URI="https://priv.example.com/key.php?r=52"
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -424,12 +424,12 @@ http://media.example.com/third.ts
                     keyformat: None,
                     keyformatversions: None,
                 },
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ]
         );
@@ -449,12 +449,12 @@ http://media.example.com/third.ts
                     keyformat: None,
                     keyformatversions: None,
                 },
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ],
         };
@@ -469,12 +469,12 @@ http://media.example.com/third.ts
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:10
 #EXT-X-KEY:METHOD=AES-128,URI=\"https://priv.example.com/key.php?r=52\"
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 ";
 
@@ -488,12 +488,12 @@ http://media.example.com/third.ts
 #EXT-X-VERSION:6
 #EXT-X-TARGETDURATION:10
 #EXT-X-MAP:URI="init.mp4"
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -508,12 +508,12 @@ http://media.example.com/third.ts
                     uri: "init.mp4".to_string(),
                     byterange: None,
                 },
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ]
         );
@@ -530,12 +530,12 @@ http://media.example.com/third.ts
                     uri: "init.mp4".to_string(),
                     byterange: None,
                 },
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ],
         };
@@ -550,12 +550,12 @@ http://media.example.com/third.ts
 #EXT-X-VERSION:6
 #EXT-X-TARGETDURATION:10
 #EXT-X-MAP:URI=\"init.mp4\"
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 ";
 
@@ -569,12 +569,12 @@ http://media.example.com/third.ts
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:10
 #EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00Z
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -586,12 +586,12 @@ http://media.example.com/third.ts
                 Tag::ExtXVersion(3),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ]
         );
@@ -605,12 +605,12 @@ http://media.example.com/third.ts
                 Tag::ExtXVersion(3),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ],
         };
@@ -625,12 +625,12 @@ http://media.example.com/third.ts
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:10
 #EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00Z
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 ";
 
@@ -644,12 +644,12 @@ http://media.example.com/third.ts
 #EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXT-X-DATERANGE:ID="ad-break",START-DATE="2020-01-01T00:00:00Z",DURATION=60.0
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -671,12 +671,12 @@ http://media.example.com/third.ts
                     scte35_in: None,
                     end_on_next: None,
                 },
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ]
         );
@@ -700,12 +700,12 @@ http://media.example.com/third.ts
                     scte35_in: None,
                     end_on_next: None,
                 },
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(9.009, None),
-                Tag::Uri("http://media.example.com/second.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/first.ts".to_string()),
+                Tag::ExtInf(5.005, None),
+                Tag::Uri("https://media.example.com/second.ts".to_string()),
                 Tag::ExtInf(3.003, None),
-                Tag::Uri("http://media.example.com/third.ts".to_string()),
+                Tag::Uri("https://media.example.com/third.ts".to_string()),
                 Tag::ExtXEndList,
             ],
         };
@@ -720,12 +720,12 @@ http://media.example.com/third.ts
 #EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXT-X-DATERANGE:ID=\"ad-break\",START-DATE=\"2020-01-01T00:00:00Z\",DURATION=60.6
-#EXTINF:9.009,
-http://media.example.com/first.ts
-#EXTINF:9.009,
-http://media.example.com/second.ts
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
 #EXTINF:3.003,
-http://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 ";
 
