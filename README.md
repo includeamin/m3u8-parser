@@ -1,7 +1,7 @@
 # M3U8 Parser
 
-[![Crates.io](https://img.shields.io/crates/v/m3u8.svg)](https://crates.io/crates/m3u8)
-[![Documentation](https://docs.rs/m3u8/badge.svg)](https://docs.rs/m3u8)
+[![Crates.io](https://img.shields.io/crates/v/m3u8-parser.svg)](https://crates.io/crates/m3u8-parser)
+[![Documentation](https://docs.rs/m3u8-parser/badge.svg)](https://docs.rs/m3u8-parser)
 [![check](https://github.com/includeamin/m3u8-parser/actions/workflows/rust.yml/badge.svg)](https://github.com/includeamin/m3u8-parser/actions/workflows/rust.yml)
 
 A Rust crate for parsing and creating M3U8 version 7 files for HTTP Live Streaming (HLS), as specified
@@ -28,7 +28,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-m3u8-parser = "0.3.0"
+m3u8-parser = "0.4.0"
 ```
 
 ## Usage

@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### ⚙️ Miscellaneous Tasks
 
 - Add a Note about the status of the project
+- Fix `Crates.io` badge in `README.md`
 
 ## [0.3.0] - 2024-11-01
 
