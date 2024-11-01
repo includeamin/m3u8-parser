@@ -1,5 +1,9 @@
+mod lib_tests;
+mod validation;
+
 /// A module for handling M3U8 playlists, including parsing and generating playlist tags.
 pub mod m3u8_parser {
+    use crate::validation::ValidationError;
     use std::fs::File;
     use std::io;
     use std::io::BufRead;
@@ -184,6 +188,101 @@ pub mod m3u8_parser {
             }
             Ok(())
         }
+
+        /// Validates the playlist according to RFC 8216.
+        ///
+        /// # Returns
+        ///
+        /// A result indicating success or a list of validation errors.
+        pub fn validate(&self) -> Result<(), Vec<ValidationError>> {
+            let mut errors = Vec::new();
+
+            // Ensure the playlist starts with #EXTM3U
+            match self.tags.first() {
+                Some(Tag::ExtM3U) => {}
+                _ => errors.push(ValidationError::MissingExtM3U),
+            }
+
+            // Validate each tag according to its rules
+            for tag in &self.tags {
+                match tag {
+                    Tag::ExtXVersion(version) => {
+                        if *version < 1 || *version > 7 {
+                            errors.push(ValidationError::InvalidVersion(*version));
+                        }
+                    }
+                    Tag::ExtInf(duration, _) => {
+                        if *duration <= 0.0 {
+                            errors.push(ValidationError::InvalidDuration(*duration));
+                        }
+                    }
+                    Tag::ExtXTargetDuration(duration) => {
+                        if *duration == 0 {
+                            errors.push(ValidationError::InvalidTargetDuration(*duration));
+                        }
+                    }
+                    Tag::ExtXMediaSequence(sequence) => {
+                        if *sequence == 0 {
+                            errors.push(ValidationError::InvalidMediaSequence(*sequence));
+                        }
+                    }
+                    Tag::ExtXKey { method, .. } => {
+                        if method != "NONE" && method != "AES-128" && method != "SAMPLE-AES" {
+                            errors.push(ValidationError::InvalidKeyMethod(method.clone()));
+                        }
+                    }
+                    Tag::ExtXMap { uri, .. } => {
+                        if uri.is_empty() {
+                            errors.push(ValidationError::InvalidMapUri);
+                        }
+                    }
+                    Tag::ExtXProgramDateTime(date_time) => {
+                        if date_time.is_empty() {
+                            errors.push(ValidationError::InvalidProgramDateTime);
+                        }
+                    }
+                    Tag::ExtXDateRange {
+                        id,
+                        start_date,
+                        end_date,
+                        duration,
+                        planned_duration,
+                        ..
+                    } => {
+                        if id.is_empty() {
+                            errors.push(ValidationError::InvalidDateRangeId);
+                        }
+                        if start_date.is_empty() {
+                            errors.push(ValidationError::InvalidDateRangeStartDate);
+                        }
+                        if let Some(end_date) = end_date {
+                            if end_date < start_date {
+                                errors.push(ValidationError::InvalidDateRangeEndDate);
+                            }
+                        }
+                        if let Some(duration) = duration {
+                            if *duration < 0.0 {
+                                errors.push(ValidationError::InvalidDateRangeDuration(*duration));
+                            }
+                        }
+                        if let Some(planned_duration) = planned_duration {
+                            if *planned_duration < 0.0 {
+                                errors.push(ValidationError::InvalidDateRangePlannedDuration(
+                                    *planned_duration,
+                                ));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            if errors.is_empty() {
+                Ok(())
+            } else {
+                Err(errors)
+            }
+        }
     }
 
     /// A builder for creating a `Playlist` with a chained interface.
@@ -310,9 +409,17 @@ pub mod m3u8_parser {
             self
         }
 
-        /// Builds the `Playlist`.
-        pub fn build(self) -> Playlist {
-            Playlist { tags: self.tags }
+        /// Builds the `Playlist`, validating it according to RFC 8216.
+        ///
+        /// # Returns
+        ///
+        /// A result containing a `Playlist` if valid, or a list of validation errors.
+        pub fn build(self) -> Result<Playlist, Vec<ValidationError>> {
+            let playlist = Playlist { tags: self.tags };
+            match playlist.validate() {
+                Ok(_) => Ok(playlist),
+                Err(errors) => Err(errors),
+            }
         }
     }
 
@@ -445,472 +552,5 @@ pub mod m3u8_parser {
                 Tag::Uri(uri) => write!(f, "{}", uri),
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::m3u8_parser::{Playlist, PlaylistBuilder, Tag};
-    use std::io::Write;
-
-    #[test]
-    fn test_parse_simple_playlist() {
-        let data = r#"
-#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:10
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-"#;
-
-        let playlist = Playlist::from_reader(data.as_bytes()).unwrap();
-        assert_eq!(
-            playlist.tags,
-            vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(3),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ]
-        );
-    }
-
-    #[test]
-    fn test_write_simple_playlist() {
-        let playlist = Playlist {
-            tags: vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(3),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ],
-        };
-
-        let mut output = Vec::new();
-        for tag in &playlist.tags {
-            writeln!(output, "{}", tag).unwrap();
-        }
-        let output = String::from_utf8(output).unwrap();
-
-        let expected = "#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:10
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-";
-
-        assert_eq!(output, expected);
-    }
-
-    #[test]
-    fn test_parse_playlist_with_key() {
-        let data = r#"
-#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:10
-#EXT-X-KEY:METHOD=AES-128,URI="https://priv.example.com/key.php?r=52"
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-"#;
-
-        let playlist = Playlist::from_reader(data.as_bytes()).unwrap();
-        assert_eq!(
-            playlist.tags,
-            vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(3),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtXKey {
-                    method: "AES-128".to_string(),
-                    uri: Some("https://priv.example.com/key.php?r=52".to_string()),
-                    iv: None,
-                    keyformat: None,
-                    keyformatversions: None,
-                },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ]
-        );
-    }
-
-    #[test]
-    fn test_write_playlist_with_key() {
-        let playlist = Playlist {
-            tags: vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(3),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtXKey {
-                    method: "AES-128".to_string(),
-                    uri: Some("https://priv.example.com/key.php?r=52".to_string()),
-                    iv: None,
-                    keyformat: None,
-                    keyformatversions: None,
-                },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ],
-        };
-
-        let mut output = Vec::new();
-        for tag in &playlist.tags {
-            writeln!(output, "{}", tag).unwrap();
-        }
-        let output = String::from_utf8(output).unwrap();
-
-        let expected = "#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:10
-#EXT-X-KEY:METHOD=AES-128,URI=\"https://priv.example.com/key.php?r=52\"
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-";
-
-        assert_eq!(output, expected);
-    }
-
-    #[test]
-    fn test_parse_playlist_with_map() {
-        let data = r#"
-#EXTM3U
-#EXT-X-VERSION:6
-#EXT-X-TARGETDURATION:10
-#EXT-X-MAP:URI="init.mp4"
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-"#;
-
-        let playlist = Playlist::from_reader(data.as_bytes()).unwrap();
-        assert_eq!(
-            playlist.tags,
-            vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(6),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtXMap {
-                    uri: "init.mp4".to_string(),
-                    byterange: None,
-                },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ]
-        );
-    }
-
-    #[test]
-    fn test_write_playlist_with_map() {
-        let playlist = Playlist {
-            tags: vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(6),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtXMap {
-                    uri: "init.mp4".to_string(),
-                    byterange: None,
-                },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ],
-        };
-
-        let mut output = Vec::new();
-        for tag in &playlist.tags {
-            writeln!(output, "{}", tag).unwrap();
-        }
-        let output = String::from_utf8(output).unwrap();
-
-        let expected = "#EXTM3U
-#EXT-X-VERSION:6
-#EXT-X-TARGETDURATION:10
-#EXT-X-MAP:URI=\"init.mp4\"
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-";
-
-        assert_eq!(output, expected);
-    }
-
-    #[test]
-    fn test_parse_playlist_with_program_date_time() {
-        let data = r#"
-#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:10
-#EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00Z
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-"#;
-
-        let playlist = Playlist::from_reader(data.as_bytes()).unwrap();
-        assert_eq!(
-            playlist.tags,
-            vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(3),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ]
-        );
-    }
-
-    #[test]
-    fn test_write_playlist_with_program_date_time() {
-        let playlist = Playlist {
-            tags: vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(3),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ],
-        };
-
-        let mut output = Vec::new();
-        for tag in &playlist.tags {
-            writeln!(output, "{}", tag).unwrap();
-        }
-        let output = String::from_utf8(output).unwrap();
-
-        let expected = "#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:10
-#EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00Z
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-";
-
-        assert_eq!(output, expected);
-    }
-
-    #[test]
-    fn test_parse_playlist_with_daterange() {
-        let data = r#"
-#EXTM3U
-#EXT-X-VERSION:7
-#EXT-X-TARGETDURATION:10
-#EXT-X-DATERANGE:ID="ad-break",START-DATE="2020-01-01T00:00:00Z",DURATION=60.0
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-"#;
-
-        let playlist = Playlist::from_reader(data.as_bytes()).unwrap();
-        assert_eq!(
-            playlist.tags,
-            vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(7),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtXDateRange {
-                    id: "ad-break".to_string(),
-                    start_date: "2020-01-01T00:00:00Z".to_string(),
-                    end_date: None,
-                    duration: Some(60.0),
-                    planned_duration: None,
-                    scte35_cmd: None,
-                    scte35_out: None,
-                    scte35_in: None,
-                    end_on_next: None,
-                },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ]
-        );
-    }
-
-    #[test]
-    fn test_write_playlist_with_daterange() {
-        let playlist = Playlist {
-            tags: vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(7),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtXDateRange {
-                    id: "ad-break".to_string(),
-                    start_date: "2020-01-01T00:00:00Z".to_string(),
-                    end_date: None,
-                    duration: Some(60.6),
-                    planned_duration: None,
-                    scte35_cmd: None,
-                    scte35_out: None,
-                    scte35_in: None,
-                    end_on_next: None,
-                },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ],
-        };
-
-        let mut output = Vec::new();
-        for tag in &playlist.tags {
-            writeln!(output, "{}", tag).unwrap();
-        }
-        let output = String::from_utf8(output).unwrap();
-
-        let expected = "#EXTM3U
-#EXT-X-VERSION:7
-#EXT-X-TARGETDURATION:10
-#EXT-X-DATERANGE:ID=\"ad-break\",START-DATE=\"2020-01-01T00:00:00Z\",DURATION=60.6
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-";
-
-        assert_eq!(output, expected);
-    }
-
-    #[test]
-    fn test_playlist_builder() {
-        let playlist = PlaylistBuilder::new()
-            .extm3u()
-            .version(3)
-            .target_duration(10)
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
-            .end_list()
-            .build();
-
-        assert_eq!(
-            playlist.tags,
-            vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(3),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
-                Tag::ExtXEndList,
-            ]
-        );
-
-        let mut output = Vec::new();
-        for tag in &playlist.tags {
-            writeln!(output, "{}", tag).unwrap();
-        }
-        let output = String::from_utf8(output).unwrap();
-
-        let expected = "#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:10
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
-#EXT-X-ENDLIST
-";
-
-        assert_eq!(output, expected);
     }
 }
