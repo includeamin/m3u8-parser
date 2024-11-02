@@ -1,7 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::m3u8_parser::{Playlist, PlaylistBuilder, Tag};
-    use crate::validation::ValidationError;
+    use crate::m3u8::playlist::builder::PlaylistBuilder;
+    use crate::m3u8::playlist::Playlist;
+    use crate::m3u8::tags::Tag;
+    use crate::m3u8::validation::ValidationError;
     use std::io::Write;
 
     #[test]

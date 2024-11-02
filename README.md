@@ -28,7 +28,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-m3u8-parser = "0.4.0"
+m3u8-parser = "0.5.0"
 ```
 
 ## Usage
@@ -36,7 +36,7 @@ m3u8-parser = "0.4.0"
 ### Parsing a Playlist
 
 ```rust
-use m3u8_parser::Playlist;
+use m3u8_parser::m3u8::playlist::Playlist;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let data = r#"
@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Creating a Playlist
 
 ```rust
-use m3u8_parser::PlaylistBuilder;
+use m3u8_parser::m3u8::playlist::builder::PlaylistBuilder;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let playlist = PlaylistBuilder::new()
@@ -79,30 +79,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   playlist.write_to_file("playlist.m3u8")?;
   Ok(())
-}
-```
-
-
-### Using PlaylistBuilder
-
-```rust
-use m3u8_parser::PlaylistBuilder;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let playlist = PlaylistBuilder::new()
-        .extm3u()
-        .version(7)
-        .target_duration(6)
-        .extinf(5.009, None)
-        .uri("https://media.example.com/first.ts".to_string())
-        .extinf(5.009, None)
-        .uri("https://media.example.com/second.ts".to_string())
-        .extinf(3.003, None)
-        .uri("https://media.example.com/third.ts".to_string())
-        .end_list()
-        .build();
-
-    playlist.write_to_file("playlist.m3u8")?;
-    Ok(())
 }
 ```
