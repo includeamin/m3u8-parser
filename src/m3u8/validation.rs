@@ -1,9 +1,8 @@
 /// Represents different types of validation errors that can occur when processing an M3U8 playlist.
 ///
-/// This enum is used to capture specific validation issues that may arise when
-/// checking the conformity of a playlist to the M3U8 specification. Each variant
-/// represents a distinct error that provides context for what went wrong during
-/// validation.
+/// This enum captures specific validation issues that may arise when checking the conformity
+/// of a playlist to the M3U8 specification. Each variant represents a distinct error, providing
+/// context for what went wrong during validation.
 #[derive(Debug, PartialEq)]
 pub enum ValidationError {
     /// Error indicating that the #EXTM3U tag is missing from the playlist.
@@ -72,4 +71,64 @@ pub enum ValidationError {
     ///
     /// * `f32` - The invalid planned duration value that was encountered in the date range.
     InvalidDateRangePlannedDuration(f32),
+
+    /// Error indicating that the specified byte range is invalid.
+    ///
+    /// # Arguments
+    ///
+    /// * `String` - The invalid byte range that was encountered.
+    InvalidByteRange(String),
+
+    /// Error indicating that a media tag is missing required fields.
+    MissingMediaFields,
+
+    /// Error indicating that a stream information tag is invalid.
+    ///
+    /// # Arguments
+    ///
+    /// * `String` - The invalid stream information encountered.
+    InvalidStreamInf(String),
+
+    /// Error indicating that an I-frame stream information tag is invalid.
+    ///
+    /// # Arguments
+    ///
+    /// * `String` - The invalid I-frame stream information encountered.
+    InvalidIFrameStreamInf(String),
+
+    /// Error indicating that a part tag is invalid.
+    ///
+    /// # Arguments
+    ///
+    /// * `String` - The invalid part information encountered.
+    InvalidPartInfo(String),
+
+    /// Error indicating that a preload hint URI is invalid.
+    InvalidPreloadHintUri,
+
+    /// Error indicating that a rendition report URI is invalid.
+    InvalidRenditionReportUri,
+
+    /// Error indicating that the server control information is invalid.
+    InvalidServerControl,
+
+    /// Error indicating that the specified start time offset is invalid.
+    InvalidStartTimeOffset,
+
+    /// Error indicating that a skip tag is invalid.
+    ///
+    /// # Arguments
+    ///
+    /// * `String` - The invalid skip tag information encountered.
+    InvalidSkipTag(String),
+
+    /// Error indicating that the specified bitrate is invalid.
+    ///
+    /// # Arguments
+    ///
+    /// * `u32` - The invalid bitrate value that was encountered.
+    InvalidBitrate(u32),
+
+    /// Error indicating that the specified start offset is invalid.
+    InvalidStartOffset,
 }
