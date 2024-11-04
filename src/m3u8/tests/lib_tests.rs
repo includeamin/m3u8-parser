@@ -10,7 +10,7 @@ mod tests {
     fn test_parse_simple_playlist() {
         let data = r#"
 #EXTM3U
-#EXT-X-VERSION:3
+#EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXTINF:5.005,
 https://media.example.com/first.ts
@@ -26,7 +26,7 @@ https://media.example.com/third.ts
             playlist.tags,
             vec![
                 Tag::ExtM3U,
-                Tag::ExtXVersion(3),
+                Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtInf(5.005, None),
                 Tag::Uri("https://media.example.com/first.ts".to_string()),
@@ -44,7 +44,7 @@ https://media.example.com/third.ts
         let playlist = Playlist {
             tags: vec![
                 Tag::ExtM3U,
-                Tag::ExtXVersion(3),
+                Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtInf(5.005, None),
                 Tag::Uri("https://media.example.com/first.ts".to_string()),
@@ -62,17 +62,17 @@ https://media.example.com/third.ts
         }
         let output = String::from_utf8(output).unwrap();
 
-        let expected = "#EXTM3U
-#EXT-X-VERSION:3
+        let expected = r#"#EXTM3U
+#EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXTINF:5.005,
-https://media.example.com/first.ts
+#EXT-X-URI:https://media.example.com/first.ts
 #EXTINF:5.005,
-https://media.example.com/second.ts
+#EXT-X-URI:https://media.example.com/second.ts
 #EXTINF:3.003,
-https://media.example.com/third.ts
+#EXT-X-URI:https://media.example.com/third.ts
 #EXT-X-ENDLIST
-";
+"#;
 
         assert_eq!(output, expected);
     }
@@ -81,7 +81,7 @@ https://media.example.com/third.ts
     fn test_parse_playlist_with_key() {
         let data = r#"
 #EXTM3U
-#EXT-X-VERSION:3
+#EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXT-X-KEY:METHOD=AES-128,URI="https://priv.example.com/key.php?r=52"
 #EXTINF:5.005,
@@ -98,7 +98,7 @@ https://media.example.com/third.ts
             playlist.tags,
             vec![
                 Tag::ExtM3U,
-                Tag::ExtXVersion(3),
+                Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXKey {
                     method: "AES-128".to_string(),
@@ -123,7 +123,7 @@ https://media.example.com/third.ts
         let playlist = Playlist {
             tags: vec![
                 Tag::ExtM3U,
-                Tag::ExtXVersion(3),
+                Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXKey {
                     method: "AES-128".to_string(),
@@ -148,18 +148,18 @@ https://media.example.com/third.ts
         }
         let output = String::from_utf8(output).unwrap();
 
-        let expected = "#EXTM3U
-#EXT-X-VERSION:3
+        let expected = r#"#EXTM3U
+#EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
-#EXT-X-KEY:METHOD=AES-128,URI=\"https://priv.example.com/key.php?r=52\"
+#EXT-X-KEY:METHOD=AES-128,URI="https://priv.example.com/key.php?r=52"
 #EXTINF:5.005,
-https://media.example.com/first.ts
+#EXT-X-URI:https://media.example.com/first.ts
 #EXTINF:5.005,
-https://media.example.com/second.ts
+#EXT-X-URI:https://media.example.com/second.ts
 #EXTINF:3.003,
-https://media.example.com/third.ts
+#EXT-X-URI:https://media.example.com/third.ts
 #EXT-X-ENDLIST
-";
+"#;
 
         assert_eq!(output, expected);
     }
@@ -229,18 +229,18 @@ https://media.example.com/third.ts
         }
         let output = String::from_utf8(output).unwrap();
 
-        let expected = "#EXTM3U
+        let expected = r#"#EXTM3U
 #EXT-X-VERSION:6
 #EXT-X-TARGETDURATION:10
-#EXT-X-MAP:URI=\"init.mp4\"
+#EXT-X-MAP:URI="init.mp4"
 #EXTINF:5.005,
-https://media.example.com/first.ts
+#EXT-X-URI:https://media.example.com/first.ts
 #EXTINF:5.005,
-https://media.example.com/second.ts
+#EXT-X-URI:https://media.example.com/second.ts
 #EXTINF:3.003,
-https://media.example.com/third.ts
+#EXT-X-URI:https://media.example.com/third.ts
 #EXT-X-ENDLIST
-";
+"#;
 
         assert_eq!(output, expected);
     }
@@ -249,7 +249,7 @@ https://media.example.com/third.ts
     fn test_parse_playlist_with_program_date_time() {
         let data = r#"
 #EXTM3U
-#EXT-X-VERSION:3
+#EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00Z
 #EXTINF:5.005,
@@ -266,7 +266,7 @@ https://media.example.com/third.ts
             playlist.tags,
             vec![
                 Tag::ExtM3U,
-                Tag::ExtXVersion(3),
+                Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
                 Tag::ExtInf(5.005, None),
@@ -285,7 +285,7 @@ https://media.example.com/third.ts
         let playlist = Playlist {
             tags: vec![
                 Tag::ExtM3U,
-                Tag::ExtXVersion(3),
+                Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
                 Tag::ExtInf(5.005, None),
@@ -304,18 +304,18 @@ https://media.example.com/third.ts
         }
         let output = String::from_utf8(output).unwrap();
 
-        let expected = "#EXTM3U
-#EXT-X-VERSION:3
+        let expected = r#"#EXTM3U
+#EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00Z
 #EXTINF:5.005,
-https://media.example.com/first.ts
+#EXT-X-URI:https://media.example.com/first.ts
 #EXTINF:5.005,
-https://media.example.com/second.ts
+#EXT-X-URI:https://media.example.com/second.ts
 #EXTINF:3.003,
-https://media.example.com/third.ts
+#EXT-X-URI:https://media.example.com/third.ts
 #EXT-X-ENDLIST
-";
+"#;
 
         assert_eq!(output, expected);
     }
@@ -399,18 +399,18 @@ https://media.example.com/third.ts
         }
         let output = String::from_utf8(output).unwrap();
 
-        let expected = "#EXTM3U
+        let expected = r#"#EXTM3U
 #EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
-#EXT-X-DATERANGE:ID=\"ad-break\",START-DATE=\"2020-01-01T00:00:00Z\",DURATION=60.6
+#EXT-X-DATERANGE:ID="ad-break",START-DATE="2020-01-01T00:00:00Z",DURATION=60.6
 #EXTINF:5.005,
-https://media.example.com/first.ts
+#EXT-X-URI:https://media.example.com/first.ts
 #EXTINF:5.005,
-https://media.example.com/second.ts
+#EXT-X-URI:https://media.example.com/second.ts
 #EXTINF:3.003,
-https://media.example.com/third.ts
+#EXT-X-URI:https://media.example.com/third.ts
 #EXT-X-ENDLIST
-";
+"#;
 
         assert_eq!(output, expected);
     }
@@ -419,7 +419,7 @@ https://media.example.com/third.ts
     fn test_playlist_builder() {
         let playlist = PlaylistBuilder::new()
             .extm3u()
-            .version(3)
+            .version(7)
             .target_duration(10)
             .extinf(5.005, None)
             .uri("https://media.example.com/first.ts".to_string())
@@ -435,7 +435,7 @@ https://media.example.com/third.ts
             playlist.tags,
             vec![
                 Tag::ExtM3U,
-                Tag::ExtXVersion(3),
+                Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtInf(5.005, None),
                 Tag::Uri("https://media.example.com/first.ts".to_string()),
@@ -454,14 +454,14 @@ https://media.example.com/third.ts
         let output = String::from_utf8(output).unwrap();
 
         let expected = "#EXTM3U
-#EXT-X-VERSION:3
+#EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXTINF:5.005,
-https://media.example.com/first.ts
+#EXT-X-URI:https://media.example.com/first.ts
 #EXTINF:5.005,
-https://media.example.com/second.ts
+#EXT-X-URI:https://media.example.com/second.ts
 #EXTINF:3.003,
-https://media.example.com/third.ts
+#EXT-X-URI:https://media.example.com/third.ts
 #EXT-X-ENDLIST
 ";
 

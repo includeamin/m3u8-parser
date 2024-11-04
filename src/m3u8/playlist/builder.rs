@@ -1,43 +1,3 @@
-//! A builder for creating M3U8 playlists with a fluent interface.
-//!
-//! This module provides the `PlaylistBuilder` struct, which allows users
-//! to construct an M3U8 playlist step-by-step. Each method corresponds
-//! to a specific tag defined in the M3U8 specification, enabling the
-//! creation of valid playlists in a clear and concise manner.
-//!
-//! # Example
-//!
-//! ```
-//! use m3u8_parser::m3u8::playlist::builder::PlaylistBuilder;
-//!
-//! let playlist = PlaylistBuilder::new()
-//!     .extm3u()
-//!     .version(3)
-//!     .extinf(10.0, Some("Sample Title".to_string()))
-//!     .uri("http://example.com/media.ts".to_string())
-//!     .end_list()
-//!     .build()
-//!     .expect("Failed to build playlist");
-//! ```
-//!
-//! ## Methods
-//!
-//! - `new`: Creates a new `PlaylistBuilder` instance.
-//! - `extm3u`: Adds an `ExtM3U` tag to the playlist.
-//! - `version`: Adds an `ExtXVersion` tag with the specified version number.
-//! - `extinf`: Adds an `ExtInf` tag with the duration and an optional title.
-//! - `target_duration`: Adds an `ExtXTargetDuration` tag with the specified duration.
-//! - `media_sequence`: Adds an `ExtXMediaSequence` tag with the specified sequence number.
-//! - `discontinuity_sequence`: Adds an `ExtXDiscontinuitySequence` tag with the specified sequence number.
-//! - `end_list`: Adds an `ExtXEndList` tag, indicating the end of the playlist.
-//! - `key`: Adds an `ExtXKey` tag with encryption details.
-//! - `map`: Adds an `ExtXMap` tag with the specified URI and optional byte range.
-//! - `program_date_time`: Adds an `ExtXProgramDateTime` tag with the specified date and time.
-//! - `date_range`: Adds an `ExtXDateRange` tag with details for a date range.
-//! - `uri`: Adds a `Uri` tag for a media segment.
-//! - `gap`: Adds an `ExtXGap` tag to indicate a gap in the playlist.
-//! - `build`: Constructs the final `Playlist` and validates it, returning the playlist or a list of validation errors.
-
 use crate::m3u8::playlist::Playlist;
 use crate::m3u8::tags::Tag;
 use crate::m3u8::validation::ValidationError;
@@ -294,8 +254,10 @@ impl PlaylistBuilder {
 
     /// Constructs the final `Playlist` and validates it.
     pub fn build(self) -> Result<Playlist, Vec<ValidationError>> {
-        // Validate and build the playlist from the tags
-        // (Implement validation logic here)
-        Ok(Playlist { tags: self.tags })
+        let playlist = Playlist { tags: self.tags };
+        match playlist.validate() {
+            Ok(_) => Ok(playlist),
+            Err(errors) => Err(errors),
+        }
     }
 }

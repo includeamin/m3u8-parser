@@ -100,6 +100,9 @@ impl Playlist {
         if line.starts_with("#EXTM3U") {
             return Ok(Some(Tag::ExtM3U));
         }
+        if line.starts_with("#EXT-X-ENDLIST") {
+            return Ok(Some(Tag::ExtXEndList));
+        }
 
         if let Some((prefix, stripped)) = line.split_once(':') {
             match prefix {
@@ -115,7 +118,7 @@ impl Playlist {
                         .parse()
                         .map_err(|_| "Invalid duration".to_string())?;
                     let title = parts.get(1).map(|&s| s.to_string());
-                    if title.clone().is_some_and(move |t| {!t.is_empty()}) {
+                    if title.clone().is_some_and(move |t| { !t.is_empty() }) {
                         return Ok(Some(Tag::ExtInf(duration, title)));
                     }
                     return Ok(Some(Tag::ExtInf(duration, None)));
@@ -490,9 +493,6 @@ impl Playlist {
 
                     return Ok(Some(target_duration_tag));
                 }
-                "#EXT-X-ENDLIST" => {
-                    return Ok(Some(Tag::ExtXEndList));
-                }
                 _ => {}
             }
         }
@@ -534,7 +534,6 @@ impl Playlist {
             Tag::ExtXDateRange {
                 id,
                 start_date,
-
                 duration,
                 planned_duration,
                 ..
@@ -557,7 +556,7 @@ impl Playlist {
                         ));
                     }
                 }
-                // TODO: add validation for the enddate
+               
                 // if end_date.is_some_and(move |t| {t.is_empty()})  {
                 //     // Add checks for end_date format or validity as needed
                 // } else {
