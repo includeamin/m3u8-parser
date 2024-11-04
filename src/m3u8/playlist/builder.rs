@@ -37,8 +37,10 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtInf` tag.
-    pub fn extinf(self, duration: f32, title: Option<String>) -> Self {
-        self.tags.borrow_mut().push(Tag::ExtInf(duration, title));
+    pub fn extinf(self, url: &str, duration: f32, title: Option<String>) -> Self {
+        self.tags
+            .borrow_mut()
+            .push(Tag::ExtInf(url.to_string(), duration, title));
         self
     }
 
@@ -133,12 +135,6 @@ impl PlaylistBuilder {
             scte35_in: scte35_in.map(|s| s.to_string()),
             end_on_next,
         });
-        self
-    }
-
-    /// Adds a `Uri` tag.
-    pub fn uri(self, uri: &str) -> Self {
-        self.tags.borrow_mut().push(Tag::Uri(uri.to_string()));
         self
     }
 

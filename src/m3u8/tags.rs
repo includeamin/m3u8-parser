@@ -13,7 +13,7 @@ pub enum Tag {
     //    It is OPTIONAL.  Its format is:
     ExtXPlaylistType(String),
     /// Represents a media segment with a duration and an optional title.
-    ExtInf(f32, Option<String>),
+    ExtInf(String, f32, Option<String>),
     /// Indicates the target duration for media segments.
     ExtXTargetDuration(u64),
     /// Specifies the media sequence number.
@@ -49,8 +49,6 @@ pub enum Tag {
         scte35_in: Option<String>,
         end_on_next: Option<bool>,
     },
-    /// Represents a URI to a media segment.
-    Uri(String),
     /// Represents a byte range.
     ExtXByteRange(String),
     /// Defines a custom tag with a specific value.
@@ -172,11 +170,11 @@ impl std::fmt::Display for Tag {
         match self {
             Tag::ExtM3U => write!(f, "#EXTM3U"),
             Tag::ExtXVersion(version) => write!(f, "#EXT-X-VERSION:{}", version),
-            Tag::ExtInf(duration, title) => {
+            Tag::ExtInf(url, duration, title) => {
                 if let Some(title) = title {
-                    write!(f, "#EXTINF:{},{},", duration, title)
+                    write!(f, "#EXTINF:{},{},{},", url, duration, title)
                 } else {
-                    write!(f, "#EXTINF:{},", duration)
+                    write!(f, "#EXTINF:{},{},", url, duration)
                 }
             }
             Tag::ExtXTargetDuration(duration) => {
@@ -452,9 +450,6 @@ impl std::fmt::Display for Tag {
                 }
 
                 write!(f, "{}", output)
-            }
-            Tag::Uri(uri) => {
-                write!(f, "#EXT-X-URI:{}", uri)
             }
             Tag::ExtXDiscontinuity => write!(f, "#EXT-X-DISCONTINUITY"),
             Tag::ExtXSessionData {

@@ -114,14 +114,15 @@ impl Playlist {
                 }
                 "#EXTINF" => {
                     let parts: Vec<&str> = stripped.splitn(2, ',').collect();
-                    let duration = parts[0]
+                    let url = parts[0].parse().map_err(|_| "Invalid url".to_string())?;
+                    let duration = parts[1]
                         .parse()
                         .map_err(|_| "Invalid duration".to_string())?;
-                    let title = parts.get(1).map(|&s| s.to_string());
+                    let title = parts.get(2).map(|&s| s.to_string());
                     if title.clone().is_some_and(move |t| !t.is_empty()) {
-                        return Ok(Some(Tag::ExtInf(duration, title)));
+                        return Ok(Some(Tag::ExtInf(url, duration, title)));
                     }
-                    return Ok(Some(Tag::ExtInf(duration, None)));
+                    return Ok(Some(Tag::ExtInf(url, duration, None)));
                 }
                 "#EXT-X-BYTERANGE" => {
                     let byterange = stripped.to_string(); // Parse the byterange format as needed
@@ -511,10 +512,6 @@ impl Playlist {
             }
         }
 
-        if !line.starts_with('#') {
-            return Ok(Some(Tag::Uri(line.to_string())));
-        }
-
         Ok(None)
     }
 
@@ -525,7 +522,7 @@ impl Playlist {
                     errors.push(ValidationError::InvalidVersion(*version));
                 }
             }
-            Tag::ExtInf(duration, _) if *duration <= 0.0 => {
+            Tag::ExtInf(_, duration, _) if *duration <= 0.0 => {
                 errors.push(ValidationError::InvalidDuration(*duration));
             }
             Tag::ExtXTargetDuration(duration) if *duration == 0 => {

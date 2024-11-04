@@ -28,12 +28,21 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None
+                ),
                 Tag::ExtXEndList,
             ]
         );
@@ -46,12 +55,21 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None,
+                ),
                 Tag::ExtXEndList,
             ],
         };
@@ -107,12 +125,21 @@ https://media.example.com/third.ts
                     keyformat: None,
                     keyformatversions: None,
                 },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None
+                ),
                 Tag::ExtXEndList,
             ]
         );
@@ -132,12 +159,21 @@ https://media.example.com/third.ts
                     keyformat: None,
                     keyformatversions: None,
                 },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None,
+                ),
                 Tag::ExtXEndList,
             ],
         };
@@ -191,12 +227,21 @@ https://media.example.com/third.ts
                     uri: "init.mp4".to_string(),
                     byterange: None,
                 },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None
+                ),
                 Tag::ExtXEndList,
             ]
         );
@@ -213,12 +258,21 @@ https://media.example.com/third.ts
                     uri: "init.mp4".to_string(),
                     byterange: None,
                 },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None,
+                ),
                 Tag::ExtXEndList,
             ],
         };
@@ -269,12 +323,21 @@ https://media.example.com/third.ts
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None
+                ),
                 Tag::ExtXEndList,
             ]
         );
@@ -288,12 +351,21 @@ https://media.example.com/third.ts
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None,
+                ),
                 Tag::ExtXEndList,
             ],
         };
@@ -327,12 +399,9 @@ https://media.example.com/third.ts
 #EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXT-X-DATERANGE:ID="ad-break",START-DATE="2020-01-01T00:00:00Z",DURATION=60.0
-#EXTINF:5.005,
-https://media.example.com/first.ts
-#EXTINF:5.005,
-https://media.example.com/second.ts
-#EXTINF:3.003,
-https://media.example.com/third.ts
+#EXTINF:https://media.example.com/first.ts,5.005
+#EXTINF:https://media.example.com/second.ts,5.005
+#EXTINF:https://media.example.com/third.ts,3.003
 #EXT-X-ENDLIST
 "#;
 
@@ -354,12 +423,21 @@ https://media.example.com/third.ts
                     scte35_in: None,
                     end_on_next: None,
                 },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None
+                ),
                 Tag::ExtXEndList,
             ]
         );
@@ -383,12 +461,21 @@ https://media.example.com/third.ts
                     scte35_in: None,
                     end_on_next: None,
                 },
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None,
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None,
+                ),
                 Tag::ExtXEndList,
             ],
         };
@@ -421,12 +508,9 @@ https://media.example.com/third.ts
             .extm3u()
             .version(7)
             .target_duration(10)
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", 5.005, None)
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build()
             .unwrap();
@@ -437,12 +521,21 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/first.ts".to_string()),
-                Tag::ExtInf(5.005, None),
-                Tag::Uri("https://media.example.com/second.ts".to_string()),
-                Tag::ExtInf(3.003, None),
-                Tag::Uri("https://media.example.com/third.ts".to_string()),
+                Tag::ExtInf(
+                    "https://media.example.com/first.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/second.ts".to_string(),
+                    5.005,
+                    None
+                ),
+                Tag::ExtInf(
+                    "https://media.example.com/third.ts".to_string(),
+                    3.003,
+                    None
+                ),
                 Tag::ExtXEndList,
             ]
         );
@@ -474,12 +567,9 @@ https://media.example.com/third.ts
             .extm3u()
             .version(3)
             .target_duration(10)
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", 5.005, None)
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build();
 
@@ -491,12 +581,9 @@ https://media.example.com/third.ts
         let playlist = PlaylistBuilder::new()
             .version(3)
             .target_duration(10)
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", 5.005, None)
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build();
 
@@ -509,12 +596,9 @@ https://media.example.com/third.ts
             .extm3u()
             .version(8) // Invalid version
             .target_duration(10)
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", 5.005, None)
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build();
 
@@ -527,12 +611,9 @@ https://media.example.com/third.ts
             .extm3u()
             .version(3)
             .target_duration(10)
-            .extinf(-5.005, None) // Invalid duration
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", -5.005, None) // Invalid duration
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build();
 
@@ -548,12 +629,9 @@ https://media.example.com/third.ts
             .extm3u()
             .version(3)
             .target_duration(0) // Invalid target duration
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", 5.005, None)
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build();
 
@@ -576,12 +654,9 @@ https://media.example.com/third.ts
                 None,
                 None,
             )
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", 5.005, None)
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build();
 
@@ -600,12 +675,9 @@ https://media.example.com/third.ts
             .version(3)
             .target_duration(10)
             .map("", None) // Invalid map URI
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", 5.005, None)
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build();
 
@@ -619,12 +691,9 @@ https://media.example.com/third.ts
             .version(3)
             .target_duration(10)
             .program_date_time("") // Invalid program date time
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", 5.005, None)
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build();
 
@@ -648,12 +717,9 @@ https://media.example.com/third.ts
                 None,
                 None,
             )
-            .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts")
-            .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts")
-            .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts")
+            .extinf("https://media.example.com/first.ts", 5.005, None)
+            .extinf("https://media.example.com/second.ts", 5.005, None)
+            .extinf("https://media.example.com/third.ts", 3.003, None)
             .end_list()
             .build();
 
