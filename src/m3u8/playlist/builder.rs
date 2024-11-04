@@ -1,10 +1,13 @@
 use crate::m3u8::playlist::Playlist;
 use crate::m3u8::tags::Tag;
 use crate::m3u8::validation::ValidationError;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// A builder for creating a `Playlist` with a chained interface.
+#[derive(Clone)]
 pub struct PlaylistBuilder {
-    tags: Vec<Tag>,
+    tags: Rc<RefCell<Vec<Tag>>>,
 }
 
 impl Default for PlaylistBuilder {
@@ -16,61 +19,69 @@ impl Default for PlaylistBuilder {
 impl PlaylistBuilder {
     /// Creates a new `PlaylistBuilder`.
     pub fn new() -> Self {
-        Self { tags: Vec::new() }
+        Self {
+            tags: Rc::new(RefCell::new(Vec::new())),
+        }
     }
 
     /// Adds an `ExtM3U` tag.
-    pub fn extm3u(mut self) -> Self {
-        self.tags.push(Tag::ExtM3U);
+    pub fn extm3u(self) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtM3U);
         self
     }
 
     /// Adds an `ExtXVersion` tag.
-    pub fn version(mut self, version: u8) -> Self {
-        self.tags.push(Tag::ExtXVersion(version));
+    pub fn version(self, version: u8) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXVersion(version));
         self
     }
 
     /// Adds an `ExtInf` tag.
-    pub fn extinf(mut self, duration: f32, title: Option<String>) -> Self {
-        self.tags.push(Tag::ExtInf(duration, title));
+    pub fn extinf(self, duration: f32, title: Option<String>) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtInf(duration, title));
         self
     }
 
     /// Adds an `ExtXTargetDuration` tag.
-    pub fn target_duration(mut self, duration: u64) -> Self {
-        self.tags.push(Tag::ExtXTargetDuration(duration));
+    pub fn target_duration(self, duration: u64) -> Self {
+        self.tags
+            .borrow_mut()
+            .push(Tag::ExtXTargetDuration(duration));
         self
     }
 
     /// Adds an `ExtXMediaSequence` tag.
-    pub fn media_sequence(mut self, sequence: u64) -> Self {
-        self.tags.push(Tag::ExtXMediaSequence(sequence));
+    pub fn media_sequence(self, sequence: u64) -> Self {
+        self.tags
+            .borrow_mut()
+            .push(Tag::ExtXMediaSequence(sequence));
         self
     }
 
     /// Adds an `ExtXDiscontinuitySequence` tag.
-    pub fn discontinuity_sequence(mut self, sequence: u32) -> Self {
-        self.tags.push(Tag::ExtXDiscontinuitySequence(sequence));
+    pub fn discontinuity_sequence(self, sequence: u32) -> Self {
+        self.tags
+            .borrow_mut()
+            .push(Tag::ExtXDiscontinuitySequence(sequence));
         self
     }
 
     /// Adds an `ExtXEndList` tag.
-    pub fn end_list(mut self) -> Self {
-        self.tags.push(Tag::ExtXEndList);
+    pub fn end_list(self) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXEndList);
         self
     }
 
     /// Adds an `ExtXKey` tag.
     pub fn key(
-        mut self,
+        self,
         method: &str,
         uri: Option<&str>,
         iv: Option<&str>,
         keyformat: Option<&str>,
         keyformatversions: Option<&str>,
     ) -> Self {
-        self.tags.push(Tag::ExtXKey {
+        self.tags.borrow_mut().push(Tag::ExtXKey {
             method: method.to_string(),
             uri: uri.map(|s| s.to_string()),
             iv: iv.map(|s| s.to_string()),
@@ -81,8 +92,8 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXMap` tag.
-    pub fn map(mut self, uri: &str, byterange: Option<&str>) -> Self {
-        self.tags.push(Tag::ExtXMap {
+    pub fn map(self, uri: &str, byterange: Option<&str>) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXMap {
             uri: uri.to_string(),
             byterange: byterange.map(|s| s.to_string()),
         });
@@ -90,15 +101,17 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXProgramDateTime` tag.
-    pub fn program_date_time(mut self, date_time: &str) -> Self {
-        self.tags.push(Tag::ExtXProgramDateTime(date_time.to_string()));
+    pub fn program_date_time(self, date_time: &str) -> Self {
+        self.tags
+            .borrow_mut()
+            .push(Tag::ExtXProgramDateTime(date_time.to_string()));
         self
     }
 
     /// Adds an `ExtXDateRange` tag.
     #[allow(clippy::too_many_arguments)]
     pub fn date_range(
-        mut self,
+        self,
         id: &str,
         start_date: &str,
         end_date: Option<&str>,
@@ -109,7 +122,7 @@ impl PlaylistBuilder {
         scte35_in: Option<&str>,
         end_on_next: Option<bool>,
     ) -> Self {
-        self.tags.push(Tag::ExtXDateRange {
+        self.tags.borrow_mut().push(Tag::ExtXDateRange {
             id: id.to_string(),
             start_date: start_date.to_string(),
             end_date: end_date.map(|s| s.to_string()),
@@ -124,33 +137,37 @@ impl PlaylistBuilder {
     }
 
     /// Adds a `Uri` tag.
-    pub fn uri(mut self, uri: &str) -> Self {
-        self.tags.push(Tag::Uri(uri.to_string()));
+    pub fn uri(self, uri: &str) -> Self {
+        self.tags.borrow_mut().push(Tag::Uri(uri.to_string()));
         self
     }
 
     /// Adds an `ExtXGap` tag.
-    pub fn gap(mut self) -> Self {
-        self.tags.push(Tag::ExtXGap);
+    pub fn gap(self) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXGap);
         self
     }
 
     /// Adds an `ExtXByteRange` tag.
-    pub fn byte_range(mut self, byterange: &str) -> Self {
-        self.tags.push(Tag::ExtXByteRange(byterange.to_string()));
+    pub fn byte_range(self, byterange: &str) -> Self {
+        self.tags
+            .borrow_mut()
+            .push(Tag::ExtXByteRange(byterange.to_string()));
         self
     }
 
     /// Adds an `ExtXDefine` tag.
-    pub fn define(mut self, value: &str) -> Self {
-        self.tags.push(Tag::ExtXDefine(value.to_string()));
+    pub fn define(self, value: &str) -> Self {
+        self.tags
+            .borrow_mut()
+            .push(Tag::ExtXDefine(value.to_string()));
         self
     }
 
     /// Adds an `ExtXMedia` tag.
     #[allow(clippy::too_many_arguments)]
     pub fn media(
-        mut self,
+        self,
         type_: &str,
         group_id: &str,
         name: Option<&str>,
@@ -160,7 +177,7 @@ impl PlaylistBuilder {
         characteristics: Option<&str>,
         language: Option<&str>,
     ) -> Self {
-        self.tags.push(Tag::ExtXMedia {
+        self.tags.borrow_mut().push(Tag::ExtXMedia {
             type_: type_.to_string(),
             group_id: group_id.to_string(),
             name: name.map(|s| s.to_string()),
@@ -176,7 +193,7 @@ impl PlaylistBuilder {
     /// Adds an `ExtXStreamInf` tag.
     #[allow(clippy::too_many_arguments)]
     pub fn stream_inf(
-        mut self,
+        self,
         bandwidth: u32,
         codecs: Option<&str>,
         resolution: Option<&str>,
@@ -186,7 +203,7 @@ impl PlaylistBuilder {
         subtitle: Option<&str>,
         closed_captions: Option<&str>,
     ) -> Self {
-        self.tags.push(Tag::ExtXStreamInf {
+        self.tags.borrow_mut().push(Tag::ExtXStreamInf {
             bandwidth,
             codecs: codecs.map(|s| s.to_string()),
             resolution: resolution.map(|s| s.to_string()),
@@ -201,14 +218,14 @@ impl PlaylistBuilder {
 
     /// Adds an `ExtXIFrameStreamInf` tag.
     pub fn iframe_stream_inf(
-        mut self,
+        self,
         bandwidth: u32,
         codecs: Option<&str>,
         resolution: Option<&str>,
         frame_rate: Option<f32>,
         uri: &str,
     ) -> Self {
-        self.tags.push(Tag::ExtXIFrameStreamInf {
+        self.tags.borrow_mut().push(Tag::ExtXIFrameStreamInf {
             bandwidth,
             codecs: codecs.map(|s| s.to_string()),
             resolution: resolution.map(|s| s.to_string()),
@@ -219,20 +236,20 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXBitrate` tag.
-    pub fn bitrate(mut self, bitrate: u32) -> Self {
-        self.tags.push(Tag::ExtXBitrate(bitrate));
+    pub fn bitrate(self, bitrate: u32) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXBitrate(bitrate));
         self
     }
 
     /// Adds an `ExtXIndependentSegments` tag.
-    pub fn independent_segments(mut self) -> Self {
-        self.tags.push(Tag::ExtXIndependentSegments);
+    pub fn independent_segments(self) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXIndependentSegments);
         self
     }
 
     /// Adds an `ExtXStart` tag.
-    pub fn start(mut self, time_offset: &str, precise: Option<bool>) -> Self {
-        self.tags.push(Tag::ExtXStart {
+    pub fn start(self, time_offset: &str, precise: Option<bool>) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXStart {
             time_offset: time_offset.to_string(),
             precise,
         });
@@ -240,8 +257,8 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXSessionData` tag.
-    pub fn session_data(mut self, id: &str, value: &str, language: Option<&str>) -> Self {
-        self.tags.push(Tag::ExtXSessionData {
+    pub fn session_data(self, id: &str, value: &str, language: Option<&str>) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXSessionData {
             id: id.to_string(),
             value: value.to_string(),
             language: language.map(|s| s.to_string()),
@@ -250,8 +267,8 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXSessionKey` tag.
-    pub fn session_key(mut self, method: &str, uri: Option<&str>, iv: Option<&str>) -> Self {
-        self.tags.push(Tag::ExtXSessionKey {
+    pub fn session_key(self, method: &str, uri: Option<&str>, iv: Option<&str>) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXSessionKey {
             method: method.to_string(),
             uri: uri.map(|s| s.to_string()),
             iv: iv.map(|s| s.to_string()),
@@ -261,7 +278,9 @@ impl PlaylistBuilder {
 
     /// Constructs the final `Playlist` and validates it.
     pub fn build(self) -> Result<Playlist, Vec<ValidationError>> {
-        let playlist = Playlist { tags: self.tags };
+        let playlist = Playlist {
+            tags: self.tags.borrow().clone(),
+        };
         match playlist.validate() {
             Ok(_) => Ok(playlist),
             Err(errors) => Err(errors),
@@ -269,8 +288,10 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXPlaylistType` tag.
-    pub fn playlist_type(mut self, playlist_type: &str) -> Self {
-        self.tags.push(Tag::ExtXPlaylistType(playlist_type.to_string()));
+    pub fn playlist_type(self, playlist_type: &str) -> Self {
+        self.tags
+            .borrow_mut()
+            .push(Tag::ExtXPlaylistType(playlist_type.to_string()));
         self
     }
 }

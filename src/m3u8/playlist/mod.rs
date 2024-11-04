@@ -118,7 +118,7 @@ impl Playlist {
                         .parse()
                         .map_err(|_| "Invalid duration".to_string())?;
                     let title = parts.get(1).map(|&s| s.to_string());
-                    if title.clone().is_some_and(move |t| { !t.is_empty() }) {
+                    if title.clone().is_some_and(move |t| !t.is_empty()) {
                         return Ok(Some(Tag::ExtInf(duration, title)));
                     }
                     return Ok(Some(Tag::ExtInf(duration, None)));
@@ -486,7 +486,8 @@ impl Playlist {
                 }
                 "#EXT-X-TARGETDURATION" => {
                     // Example input: #EXT-X-TARGETDURATION:10
-                    let target_duration: u64 = stripped.parse().map_err(|_| "Invalid target duration")?;
+                    let target_duration: u64 =
+                        stripped.parse().map_err(|_| "Invalid target duration")?;
 
                     // Create the ExtXTargetDuration tag
                     let target_duration_tag = Tag::ExtXTargetDuration(target_duration);
@@ -534,10 +535,10 @@ impl Playlist {
                 errors.push(ValidationError::InvalidMediaSequence(*sequence));
             }
             Tag::ExtXKey { method, .. }
-            if !matches!(method.as_str(), "NONE" | "AES-128" | "SAMPLE-AES") =>
-                {
-                    errors.push(ValidationError::InvalidKeyMethod(method.clone()));
-                }
+                if !matches!(method.as_str(), "NONE" | "AES-128" | "SAMPLE-AES") =>
+            {
+                errors.push(ValidationError::InvalidKeyMethod(method.clone()));
+            }
             Tag::ExtXMap { uri, .. } if uri.is_empty() => {
                 errors.push(ValidationError::InvalidMapUri);
             }

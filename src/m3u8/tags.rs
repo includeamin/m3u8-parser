@@ -2,7 +2,7 @@
 ///
 /// Each variant corresponds to a specific type of tag defined in the M3U8 specification.
 /// This enum allows for easy manipulation and representation of these tags in a playlist.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Tag {
     /// Indicates the start of an M3U8 file.
     ExtM3U,
