@@ -531,9 +531,6 @@ impl Playlist {
             Tag::ExtXTargetDuration(duration) if *duration == 0 => {
                 errors.push(ValidationError::InvalidTargetDuration(*duration));
             }
-            Tag::ExtXMediaSequence(sequence) if *sequence == 0 => {
-                errors.push(ValidationError::InvalidMediaSequence(*sequence));
-            }
             Tag::ExtXKey { method, .. }
                 if !matches!(method.as_str(), "NONE" | "AES-128" | "SAMPLE-AES") =>
             {
