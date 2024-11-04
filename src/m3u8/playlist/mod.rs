@@ -115,7 +115,10 @@ impl Playlist {
                         .parse()
                         .map_err(|_| "Invalid duration".to_string())?;
                     let title = parts.get(1).map(|&s| s.to_string());
-                    return Ok(Some(Tag::ExtInf(duration, title)));
+                    if title.clone().is_some_and(move |t| {!t.is_empty()}) {
+                        return Ok(Some(Tag::ExtInf(duration, title)));
+                    }
+                    return Ok(Some(Tag::ExtInf(duration, None)));
                 }
                 "#EXT-X-BYTERANGE" => {
                     let byterange = stripped.to_string(); // Parse the byterange format as needed
@@ -162,16 +165,15 @@ impl Playlist {
                         .ok_or("Missing BANDWIDTH attribute")?
                         .parse::<u32>()
                         .map_err(|_| "Invalid BANDWIDTH value")?;
-                    let codecs = attributes.get("CODECS").map(|s| s.clone());
-                    let resolution = attributes.get("RESOLUTION").map(|s| s.clone());
+                    let codecs = attributes.get("CODECS").cloned();
+                    let resolution = attributes.get("RESOLUTION").cloned();
                     let frame_rate = attributes
                         .get("FRAME-RATE")
-                        .map(|s| s.parse::<f32>().ok())
-                        .flatten();
-                    let audio = attributes.get("AUDIO").map(|s| s.clone());
-                    let video = attributes.get("VIDEO").map(|s| s.clone());
-                    let subtitle = attributes.get("SUBTITLES").map(|s| s.clone());
-                    let closed_captions = attributes.get("CLOSED-CAPTIONS").map(|s| s.clone());
+                        .and_then(|s| s.parse::<f32>().ok());
+                    let audio = attributes.get("AUDIO").cloned();
+                    let video = attributes.get("VIDEO").cloned();
+                    let subtitle = attributes.get("SUBTITLES").cloned();
+                    let closed_captions = attributes.get("CLOSED-CAPTIONS").cloned();
 
                     return Ok(Some(Tag::ExtXStreamInf {
                         bandwidth,
@@ -193,12 +195,11 @@ impl Playlist {
                         .ok_or("Missing BANDWIDTH attribute")?
                         .parse::<u32>()
                         .map_err(|_| "Invalid BANDWIDTH value")?;
-                    let codecs = attributes.get("CODECS").map(|s| s.clone());
-                    let resolution = attributes.get("RESOLUTION").map(|s| s.clone());
+                    let codecs = attributes.get("CODECS").cloned();
+                    let resolution = attributes.get("RESOLUTION").cloned();
                     let frame_rate = attributes
                         .get("FRAME-RATE")
-                        .map(|s| s.parse::<f32>().ok())
-                        .flatten();
+                        .and_then(|s| s.parse::<f32>().ok());
                     let uri = attributes
                         .get("URI")
                         .ok_or("Missing URI attribute")?
@@ -480,6 +481,18 @@ impl Playlist {
 
                     return Ok(Some(session_key));
                 }
+                "#EXT-X-TARGETDURATION" => {
+                    // Example input: #EXT-X-TARGETDURATION:10
+                    let target_duration: u64 = stripped.parse().map_err(|_| "Invalid target duration")?;
+
+                    // Create the ExtXTargetDuration tag
+                    let target_duration_tag = Tag::ExtXTargetDuration(target_duration);
+
+                    return Ok(Some(target_duration_tag));
+                }
+                "#EXT-X-ENDLIST" => {
+                    return Ok(Some(Tag::ExtXEndList));
+                }
                 _ => {}
             }
         }
@@ -508,10 +521,10 @@ impl Playlist {
                 errors.push(ValidationError::InvalidMediaSequence(*sequence));
             }
             Tag::ExtXKey { method, .. }
-                if !matches!(method.as_str(), "NONE" | "AES-128" | "SAMPLE-AES") =>
-            {
-                errors.push(ValidationError::InvalidKeyMethod(method.clone()));
-            }
+            if !matches!(method.as_str(), "NONE" | "AES-128" | "SAMPLE-AES") =>
+                {
+                    errors.push(ValidationError::InvalidKeyMethod(method.clone()));
+                }
             Tag::ExtXMap { uri, .. } if uri.is_empty() => {
                 errors.push(ValidationError::InvalidMapUri);
             }
@@ -521,7 +534,7 @@ impl Playlist {
             Tag::ExtXDateRange {
                 id,
                 start_date,
-                end_date,
+
                 duration,
                 planned_duration,
                 ..

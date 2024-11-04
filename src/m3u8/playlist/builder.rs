@@ -78,7 +78,7 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXTargetDuration` tag.
-    pub fn target_duration(mut self, duration: u32) -> Self {
+    pub fn target_duration(mut self, duration: u64) -> Self {
         self.tags.push(Tag::ExtXTargetDuration(duration));
         self
     }
@@ -185,6 +185,7 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXMedia` tag.
+    #[allow(clippy::too_many_arguments)]
     pub fn media(
         mut self,
         type_: String,
@@ -210,6 +211,7 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXStreamInf` tag.
+    #[allow(clippy::too_many_arguments)]
     pub fn stream_inf(
         mut self,
         bandwidth: u32,

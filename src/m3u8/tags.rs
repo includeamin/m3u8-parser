@@ -11,7 +11,7 @@ pub enum Tag {
     /// Represents a media segment with a duration and an optional title.
     ExtInf(f32, Option<String>),
     /// Indicates the target duration for media segments.
-    ExtXTargetDuration(u32),
+    ExtXTargetDuration(u64),
     /// Specifies the media sequence number.
     ExtXMediaSequence(u64),
     /// Represents a discontinuity sequence number.

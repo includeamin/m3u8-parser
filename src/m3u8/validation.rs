@@ -27,7 +27,7 @@ pub enum ValidationError {
     /// # Arguments
     ///
     /// * `u32` - The invalid target duration value that was encountered.
-    InvalidTargetDuration(u32),
+    InvalidTargetDuration(u64),
 
     /// Error indicating that the media sequence number specified is invalid.
     ///
