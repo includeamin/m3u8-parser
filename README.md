@@ -8,7 +8,7 @@ A Rust crate for parsing and creating M3U8 version 7 files for HTTP Live Streami
 by [RFC 8216](https://tools.ietf.org/html/rfc8216).
 
 > [!IMPORTANT]
-> This project is under active development. Features and APIs may change.
+> This project is currently under active development. Please note that features and APIs are subject to change. My goal is to ensure full compatibility with [RFC 8216](https://tools.ietf.org/html/rfc8216).
 
 ## Features
 
