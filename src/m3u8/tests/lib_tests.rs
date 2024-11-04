@@ -422,11 +422,11 @@ https://media.example.com/third.ts
             .version(7)
             .target_duration(10)
             .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build()
             .unwrap();
@@ -475,11 +475,11 @@ https://media.example.com/third.ts
             .version(3)
             .target_duration(10)
             .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build();
 
@@ -492,11 +492,11 @@ https://media.example.com/third.ts
             .version(3)
             .target_duration(10)
             .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build();
 
@@ -510,11 +510,11 @@ https://media.example.com/third.ts
             .version(8) // Invalid version
             .target_duration(10)
             .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build();
 
@@ -528,11 +528,11 @@ https://media.example.com/third.ts
             .version(3)
             .target_duration(10)
             .extinf(-5.005, None) // Invalid duration
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build();
 
@@ -549,11 +549,11 @@ https://media.example.com/third.ts
             .version(3)
             .target_duration(0) // Invalid target duration
             .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build();
 
@@ -570,18 +570,18 @@ https://media.example.com/third.ts
             .version(3)
             .target_duration(10)
             .key(
-                "INVALID-METHOD".to_string(), // Invalid key method
-                Some("https://priv.example.com/key.php?r=52".to_string()),
+                "INVALID-METHOD", // Invalid key method
+                Some("https://priv.example.com/key.php?r=52"),
                 None,
                 None,
                 None,
             )
             .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build();
 
@@ -599,13 +599,13 @@ https://media.example.com/third.ts
             .extm3u()
             .version(3)
             .target_duration(10)
-            .map("".to_string(), None) // Invalid map URI
+            .map("", None) // Invalid map URI
             .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build();
 
@@ -618,13 +618,13 @@ https://media.example.com/third.ts
             .extm3u()
             .version(3)
             .target_duration(10)
-            .program_date_time("".to_string()) // Invalid program date time
+            .program_date_time("") // Invalid program date time
             .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build();
 
@@ -638,8 +638,8 @@ https://media.example.com/third.ts
             .version(3)
             .target_duration(10)
             .date_range(
-                "".to_string(), // Invalid date range ID
-                "2020-01-01T00:00:00Z".to_string(),
+                "", // Invalid date range ID
+                "2020-01-01T00:00:00Z",
                 None,
                 Some(-60.0), // Invalid date range duration
                 None,
@@ -649,11 +649,11 @@ https://media.example.com/third.ts
                 None,
             )
             .extinf(5.005, None)
-            .uri("https://media.example.com/first.ts".to_string())
+            .uri("https://media.example.com/first.ts")
             .extinf(5.005, None)
-            .uri("https://media.example.com/second.ts".to_string())
+            .uri("https://media.example.com/second.ts")
             .extinf(3.003, None)
-            .uri("https://media.example.com/third.ts".to_string())
+            .uri("https://media.example.com/third.ts")
             .end_list()
             .build();
 
