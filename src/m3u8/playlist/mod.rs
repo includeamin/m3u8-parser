@@ -493,6 +493,19 @@ impl Playlist {
 
                     return Ok(Some(target_duration_tag));
                 }
+                "#EXT-X-PLAYLIST-TYPE" => {
+                    let attributes = parse_attributes(stripped)?;
+                    let playlist_type = attributes
+                        .get("PLAYLIST-TYPE")
+                        .ok_or("Missing PLAYLIST-TYPE attribute")?
+                        .clone();
+
+                    if playlist_type != "EVENT" && playlist_type != "VOD" {
+                        return Err("Invalid PLAYLIST-TYPE value".to_string());
+                    }
+
+                    return Ok(Some(Tag::ExtXPlaylistType(playlist_type)));
+                }
                 _ => {}
             }
         }
@@ -556,7 +569,7 @@ impl Playlist {
                         ));
                     }
                 }
-               
+
                 // if end_date.is_some_and(move |t| {t.is_empty()})  {
                 //     // Add checks for end_date format or validity as needed
                 // } else {

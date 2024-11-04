@@ -8,6 +8,10 @@ pub enum Tag {
     ExtM3U,
     /// Specifies the version of the M3U8 playlist.
     ExtXVersion(u8),
+    /// The EXT-X-PLAYLIST-TYPE tag provides mutability information about the
+    //    Media Playlist file.  It applies to the entire Media Playlist file.
+    //    It is OPTIONAL.  Its format is:
+    ExtXPlaylistType(String),
     /// Represents a media segment with a duration and an optional title.
     ExtInf(f32, Option<String>),
     /// Indicates the target duration for media segments.
@@ -472,6 +476,10 @@ impl std::fmt::Display for Tag {
                 if let Some(iv) = iv {
                     write!(f, ",IV={}", iv)?;
                 }
+                Ok(())
+            }
+            Tag::ExtXPlaylistType(playlist_type) => {
+                write!(f, "#EXT-X-PLAYLIST-TYPE:{}", playlist_type)?;
                 Ok(())
             }
         }

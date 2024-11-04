@@ -260,4 +260,10 @@ impl PlaylistBuilder {
             Err(errors) => Err(errors),
         }
     }
+
+    /// Adds an `ExtXPlaylistType` tag.
+    pub fn playlist_type(mut self, playlist_type: String) -> Self {
+        self.tags.push(Tag::ExtXPlaylistType(playlist_type));
+        self
+    }
 }
