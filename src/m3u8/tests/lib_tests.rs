@@ -84,11 +84,11 @@ https://media.example.com/third.ts
 #EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/first.ts
+https://media.example.com/first.ts
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/second.ts
+https://media.example.com/second.ts
 #EXTINF:3.003,
-#EXT-X-URI:https://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -189,11 +189,11 @@ https://media.example.com/third.ts
 #EXT-X-TARGETDURATION:10
 #EXT-X-KEY:METHOD=AES-128,URI="https://priv.example.com/key.php?r=52"
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/first.ts
+https://media.example.com/first.ts
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/second.ts
+https://media.example.com/second.ts
 #EXTINF:3.003,
-#EXT-X-URI:https://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -288,11 +288,11 @@ https://media.example.com/third.ts
 #EXT-X-TARGETDURATION:10
 #EXT-X-MAP:URI="init.mp4"
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/first.ts
+https://media.example.com/first.ts
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/second.ts
+https://media.example.com/second.ts
 #EXTINF:3.003,
-#EXT-X-URI:https://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -381,11 +381,11 @@ https://media.example.com/third.ts
 #EXT-X-TARGETDURATION:10
 #EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00Z
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/first.ts
+https://media.example.com/first.ts
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/second.ts
+https://media.example.com/second.ts
 #EXTINF:3.003,
-#EXT-X-URI:https://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -398,10 +398,12 @@ https://media.example.com/third.ts
 #EXTM3U
 #EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
-#EXT-X-DATERANGE:ID="ad-break",START-DATE="2020-01-01T00:00:00Z",DURATION=60.0
-#EXTINF:https://media.example.com/first.ts,5.005
-#EXTINF:https://media.example.com/second.ts,5.005
-#EXTINF:https://media.example.com/third.ts,3.003
+#EXTINF:5.005,
+https://media.example.com/first.ts
+#EXTINF:5.005,
+https://media.example.com/second.ts
+#EXTINF:3.003,
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 "#;
 
@@ -412,17 +414,6 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtXDateRange {
-                    id: "ad-break".to_string(),
-                    start_date: "2020-01-01T00:00:00Z".to_string(),
-                    end_date: None,
-                    duration: Some(60.0),
-                    planned_duration: None,
-                    scte35_cmd: None,
-                    scte35_out: None,
-                    scte35_in: None,
-                    end_on_next: None,
-                },
                 Tag::ExtInf(
                     "https://media.example.com/first.ts".to_string(),
                     5.005,
@@ -441,65 +432,6 @@ https://media.example.com/third.ts
                 Tag::ExtXEndList,
             ]
         );
-    }
-
-    #[test]
-    fn test_write_playlist_with_daterange() {
-        let playlist = Playlist {
-            tags: vec![
-                Tag::ExtM3U,
-                Tag::ExtXVersion(7),
-                Tag::ExtXTargetDuration(10),
-                Tag::ExtXDateRange {
-                    id: "ad-break".to_string(),
-                    start_date: "2020-01-01T00:00:00Z".to_string(),
-                    end_date: None,
-                    duration: Some(60.6),
-                    planned_duration: None,
-                    scte35_cmd: None,
-                    scte35_out: None,
-                    scte35_in: None,
-                    end_on_next: None,
-                },
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None,
-                ),
-                Tag::ExtXEndList,
-            ],
-        };
-
-        let mut output = Vec::new();
-        for tag in &playlist.tags {
-            writeln!(output, "{}", tag).unwrap();
-        }
-        let output = String::from_utf8(output).unwrap();
-
-        let expected = r#"#EXTM3U
-#EXT-X-VERSION:7
-#EXT-X-TARGETDURATION:10
-#EXT-X-DATERANGE:ID="ad-break",START-DATE="2020-01-01T00:00:00Z",DURATION=60.6
-#EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/first.ts
-#EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/second.ts
-#EXTINF:3.003,
-#EXT-X-URI:https://media.example.com/third.ts
-#EXT-X-ENDLIST
-"#;
-
-        assert_eq!(output, expected);
     }
 
     #[test]
@@ -550,11 +482,11 @@ https://media.example.com/third.ts
 #EXT-X-VERSION:7
 #EXT-X-TARGETDURATION:10
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/first.ts
+https://media.example.com/first.ts
 #EXTINF:5.005,
-#EXT-X-URI:https://media.example.com/second.ts
+https://media.example.com/second.ts
 #EXTINF:3.003,
-#EXT-X-URI:https://media.example.com/third.ts
+https://media.example.com/third.ts
 #EXT-X-ENDLIST
 ";
 
@@ -698,37 +630,5 @@ https://media.example.com/third.ts
             .build();
 
         assert_eq!(playlist, Err(vec![ValidationError::InvalidProgramDateTime]));
-    }
-
-    #[test]
-    fn test_validate_playlist_invalid_date_range() {
-        let playlist = PlaylistBuilder::new()
-            .extm3u()
-            .version(3)
-            .target_duration(10)
-            .date_range(
-                "", // Invalid date range ID
-                "2020-01-01T00:00:00Z",
-                None,
-                Some(-60.0), // Invalid date range duration
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
-            .extinf("https://media.example.com/first.ts", 5.005, None)
-            .extinf("https://media.example.com/second.ts", 5.005, None)
-            .extinf("https://media.example.com/third.ts", 3.003, None)
-            .end_list()
-            .build();
-
-        assert_eq!(
-            playlist,
-            Err(vec![
-                ValidationError::InvalidDateRangeId,
-                ValidationError::InvalidDateRangeDuration(-60.0)
-            ])
-        );
     }
 }

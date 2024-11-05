@@ -1,5 +1,5 @@
 #EXTM3U
 #EXT-X-TARGETDURATION:5220
 #EXTINF:5220,
-#EXT-X-URI:http://media.example.com/entire.ts
+http://media.example.com/entire.ts
 #EXT-X-ENDLIST

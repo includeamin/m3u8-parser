@@ -31,12 +31,13 @@
 
 pub mod builder;
 
-use crate::m3u8::parser::parse_attributes;
 use crate::m3u8::tags::Tag;
 use crate::m3u8::validation::ValidationError;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
+
+use regex::Regex;
 
 /// Represents a playlist containing multiple tags.
 #[derive(Debug, PartialEq)]
@@ -46,16 +47,20 @@ pub struct Playlist {
 
 impl Playlist {
     /// Creates a new `Playlist` by reading tags from a buffered reader.
-    pub fn from_reader<R: BufRead>(reader: R) -> Result<Self, String> {
+    pub fn from_reader<R: BufRead>(mut reader: R) -> Result<Self, String> {
         let mut tags = Vec::new();
 
-        for line in reader.lines() {
-            let line = line.map_err(|e| e.to_string())?.trim().to_string();
+        let mut content = String::new();
+        reader
+            .read_to_string(&mut content)
+            .map_err(|e| e.to_string())?;
+
+        for line in content.split("#") {
             if line.is_empty() {
                 continue;
             }
 
-            if let Some(tag) = Self::parse_line(&line)? {
+            if let Some(tag) = Self::parse_line(line)? {
                 tags.push(tag);
             }
         }
@@ -97,418 +102,352 @@ impl Playlist {
     }
 
     fn parse_line(line: &str) -> Result<Option<Tag>, String> {
-        if line.starts_with("#EXTM3U") {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("EXTM3U") {
             return Ok(Some(Tag::ExtM3U));
         }
-        if line.starts_with("#EXT-X-ENDLIST") {
+
+        if trimmed.starts_with("EXT-X-VERSION") {
+            // Example: #EXT-X-VERSION:7
+            let version_re = Regex::new(r#"EXT-X-VERSION:(\d+)"#).unwrap();
+            if let Some(caps) = version_re.captures(trimmed) {
+                let version = caps.get(1).unwrap().as_str();
+                return Ok(Some(Tag::ExtXVersion(version.parse().unwrap())));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-TARGETDURATION") {
+            // Example #EXT-X-TARGETDURATION:10
+            let target_duration_re = Regex::new(r#"EXT-X-TARGETDURATION:(\d+)"#).unwrap();
+            if let Some(caps) = target_duration_re.captures(trimmed) {
+                let target = caps.get(1).unwrap().as_str();
+                return Ok(Some(Tag::ExtXTargetDuration(target.parse().unwrap())));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-PLAYLIST-TYPE") {
+            // Example: #EXT-X-PLAYLIST-TYPE:EVENT
+            let playlist_type_re = Regex::new(r#"EXT-X-PLAYLIST-TYPE:(\w+)"#).unwrap();
+            if let Some(caps) = playlist_type_re.captures(trimmed) {
+                let playlist_type = caps.get(1).unwrap().as_str();
+                return Ok(Some(Tag::ExtXPlaylistType(playlist_type.to_string())));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-MEDIA-SEQUENCE") {
+            // Example: #EXT-X-MEDIA-SEQUENCE:0
+            let media_sequence_re = Regex::new(r#"EXT-X-MEDIA-SEQUENCE:(\d+)"#).unwrap();
+            if let Some(caps) = media_sequence_re.captures(trimmed) {
+                let sequence = caps.get(1).unwrap().as_str();
+                return Ok(Some(Tag::ExtXMediaSequence(sequence.parse().unwrap())));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-DISCONTINUITY-SEQUENCE") {
+            // Example: #EXT-X-DISCONTINUITY-SEQUENCE:0
+            let discontinuity_seq_re = Regex::new(r#"EXT-X-DISCONTINUITY-SEQUENCE:(\d+)"#).unwrap();
+            if let Some(caps) = discontinuity_seq_re.captures(trimmed) {
+                let sequence = caps.get(1).unwrap().as_str();
+                return Ok(Some(Tag::ExtXDiscontinuitySequence(
+                    sequence.parse().unwrap(),
+                )));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-ENDLIST") {
             return Ok(Some(Tag::ExtXEndList));
         }
 
-        if let Some((prefix, stripped)) = line.split_once(':') {
-            match prefix {
-                "#EXT-X-VERSION" => {
-                    let version = stripped
-                        .parse()
-                        .map_err(|_| "Invalid version".to_string())?;
-                    return Ok(Some(Tag::ExtXVersion(version)));
-                }
-                "#EXTINF" => {
-                    let parts: Vec<&str> = stripped.splitn(2, ',').collect();
-                    let url = parts[0].parse().map_err(|_| "Invalid url".to_string())?;
-                    let duration = parts[1]
-                        .parse()
-                        .map_err(|_| "Invalid duration".to_string())?;
-                    let title = parts.get(2).map(|&s| s.to_string());
-                    if title.clone().is_some_and(move |t| !t.is_empty()) {
-                        return Ok(Some(Tag::ExtInf(url, duration, title)));
-                    }
-                    return Ok(Some(Tag::ExtInf(url, duration, None)));
-                }
-                "#EXT-X-BYTERANGE" => {
-                    let byterange = stripped.to_string(); // Parse the byterange format as needed
-                    return Ok(Some(Tag::ExtXByteRange(byterange)));
-                }
-                "#EXT-X-DEFINE" => {
-                    // Define your structure for EXT-X-DEFINE
-                    return Ok(Some(Tag::ExtXDefine(stripped.to_string())));
-                }
-                "#EXT-X-MEDIA" => {
-                    let attributes = parse_attributes(stripped)?;
+        if trimmed.starts_with("EXT-X-KEY") {
+            // Example: #EXT-X-KEY:METHOD=AES-128,URI="https://example.com/key",IV="0x1234567890ABCDEF",KEYFORMAT="identity",KEYFORMATVERSIONS="1"
+            let key_re = Regex::new(r#"EXT-X-KEY:METHOD=([A-Za-z0-9\-]+),URI="([^"]+)"(?:,IV="([^"]*)")?(?:,KEYFORMAT="([^"]+)")?(?:,KEYFORMATVERSIONS="([^"]+)")?"#).unwrap();
 
-                    let media_type = attributes
-                        .get("TYPE")
-                        .ok_or("Missing TYPE attribute")?
-                        .clone();
-                    let uri = attributes.get("URI").cloned();
-                    let group_id = attributes
-                        .get("GROUP-ID")
-                        .ok_or("Missing GROUP-ID attribute")?
-                        .clone();
-                    let name = attributes.get("NAME").cloned();
-                    let language = attributes.get("LANGUAGE").cloned();
-                    let autoselect = attributes.get("AUTOSELECT").map(|s| s == "YES");
-                    let is_default = attributes.get("DEFAULT").map(|s| s == "YES");
-                    let characteristics = attributes.get("CHARACTERISTICS").cloned();
+            if let Some(caps) = key_re.captures(trimmed) {
+                let method = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
+                let uri = caps.get(2).map(|m| m.as_str().to_string());
+                let iv = caps.get(3).map(|m| m.as_str().to_string());
+                let keyformat = caps.get(4).map(|m| m.as_str().to_string());
+                let keyformatversions = caps.get(5).map(|m| m.as_str().to_string());
 
-                    return Ok(Some(Tag::ExtXMedia {
-                        type_: media_type,
-                        group_id,
-                        name,
-                        uri, // uri can be None, so no need to unwrap
-                        default: is_default,
-                        autoplay: autoselect,
-                        language, // Include language property
-                        characteristics,
-                    }));
-                }
-                "#EXT-X-STREAM-INF" => {
-                    let attributes = parse_attributes(stripped)?;
+                return Ok(Some(Tag::ExtXKey {
+                    method: method.to_string(),
+                    uri,
+                    iv,
+                    keyformat,
+                    keyformatversions,
+                }));
+            }
+        }
 
-                    let bandwidth = attributes
-                        .get("BANDWIDTH")
-                        .ok_or("Missing BANDWIDTH attribute")?
-                        .parse::<u32>()
-                        .map_err(|_| "Invalid BANDWIDTH value")?;
-                    let codecs = attributes.get("CODECS").cloned();
-                    let resolution = attributes.get("RESOLUTION").cloned();
-                    let frame_rate = attributes
-                        .get("FRAME-RATE")
-                        .and_then(|s| s.parse::<f32>().ok());
-                    let audio = attributes.get("AUDIO").cloned();
-                    let video = attributes.get("VIDEO").cloned();
-                    let subtitle = attributes.get("SUBTITLES").cloned();
-                    let closed_captions = attributes.get("CLOSED-CAPTIONS").cloned();
-
-                    return Ok(Some(Tag::ExtXStreamInf {
-                        bandwidth,
-                        codecs,
-                        resolution,
-                        frame_rate,
-                        audio,
-                        video,
-                        subtitle,
-                        closed_captions,
-                    }));
-                }
-
-                "#EXT-X-I-FRAME-STREAM-INF" => {
-                    let attributes = parse_attributes(stripped)?;
-
-                    let bandwidth = attributes
-                        .get("BANDWIDTH")
-                        .ok_or("Missing BANDWIDTH attribute")?
-                        .parse::<u32>()
-                        .map_err(|_| "Invalid BANDWIDTH value")?;
-                    let codecs = attributes.get("CODECS").cloned();
-                    let resolution = attributes.get("RESOLUTION").cloned();
-                    let frame_rate = attributes
-                        .get("FRAME-RATE")
-                        .and_then(|s| s.parse::<f32>().ok());
-                    let uri = attributes
-                        .get("URI")
-                        .ok_or("Missing URI attribute")?
-                        .clone();
-
-                    return Ok(Some(Tag::ExtXIFrameStreamInf {
-                        bandwidth,
-                        codecs,
-                        resolution,
-                        frame_rate,
-                        uri,
-                    }));
-                }
-                "#EXT-X-KEY" => {
-                    let attributes = parse_attributes(stripped)?;
-                    let method = attributes
-                        .get("METHOD")
-                        .ok_or("Missing METHOD attribute")?
-                        .clone();
-                    let uri = attributes.get("URI").cloned();
-                    return Ok(Some(Tag::ExtXKey {
-                        method,
-                        uri,
-                        iv: attributes.get("IV").cloned(),
-                        keyformat: attributes.get("KEYFORMAT").cloned(),
-                        keyformatversions: attributes.get("KEYFORMATVERSIONS").cloned(),
-                    }));
-                }
-                "#EXT-X-MAP" => {
-                    let attributes = parse_attributes(stripped)?;
-                    let uri = attributes
-                        .get("URI")
-                        .ok_or("Missing URI attribute")?
-                        .clone();
+        if trimmed.starts_with("EXT-X-MAP") {
+            // Example: #EXT-X-MAP:URI="init.mp4",BYTERANGE="800@0"
+            let map_re = Regex::new(r#"EXT-X-MAP:URI="([^"]+)"(?:,BYTERANGE="([^"]+)")?"#).unwrap();
+            if let Some(caps) = map_re.captures(trimmed) {
+                let uri = caps.get(1).unwrap().as_str();
+                let byterange = caps.get(2).map(|m| m.as_str().to_string());
+                if byterange.clone().is_none() || byterange.clone().unwrap() == "" {
                     return Ok(Some(Tag::ExtXMap {
-                        uri,
-                        byterange: attributes.get("BYTERANGE").cloned(),
+                        uri: uri.to_string(),
+                        byterange: None,
                     }));
                 }
-                "#EXT-X-PROGRAM-DATE-TIME" => {
-                    return Ok(Some(Tag::ExtXProgramDateTime(stripped.to_string())));
+
+                return Ok(Some(Tag::ExtXMap {
+                    uri: uri.to_string(),
+                    byterange,
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-PROGRAM-DATE-TIME") {
+            // Example: #EXT-X-PROGRAM-DATE-TIME:2024-11-05T12:00:00Z
+            let datetime_re = Regex::new(r#"EXT-X-PROGRAM-DATE-TIME:([^\s]+)"#).unwrap();
+            if let Some(caps) = datetime_re.captures(trimmed) {
+                let datetime = caps.get(1).unwrap().as_str();
+                return Ok(Some(Tag::ExtXProgramDateTime(datetime.to_string())));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-DISCONTINUITY") {
+            return Ok(Some(Tag::ExtXDiscontinuity));
+        }
+
+        if trimmed.starts_with("EXT-X-PART") {
+            // Example: #EXT-X-PART:URI="part1.ts",DURATION=5.0
+            let part_re = Regex::new(r#"EXT-X-PART:URI="([^\"]+)",DURATION=([\d\.]+)"#).unwrap();
+            if let Some(caps) = part_re.captures(trimmed) {
+                let uri = caps.get(1).unwrap().as_str();
+                let duration = caps.get(2).unwrap().as_str().parse().unwrap();
+                return Ok(Some(Tag::ExtXPart {
+                    uri: uri.to_string(),
+                    duration: Some(duration),
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-PART-INF") {
+            // Example: #EXT-X-PART-INF:PART-TARGET-DURATION=5.0,PART-HOLD-BACK=2.0
+            let part_inf_re = Regex::new(
+                r#"EXT-X-PART-INF:PART-TARGET-DURATION=([\d\.]+),PART-HOLD-BACK=([\d\.]+)"#,
+            )
+            .unwrap();
+            if let Some(caps) = part_inf_re.captures(trimmed) {
+                let part_target_duration = caps.get(1).unwrap().as_str().parse().unwrap();
+                let part_hold_back = caps.get(2).map(|m| m.as_str().parse().unwrap());
+                return Ok(Some(Tag::ExtXPartInf {
+                    part_target_duration,
+                    part_hold_back,
+                    part_number: None,
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-SERVER-CONTROL") {
+            // Example: #EXT-X-SERVER-CONTROL:CAN-PLAY=YES,CAN-SEEK=YES,CAN-PAUSE=YES,MIN-BUFFER-TIME=10.0
+            let server_control_re = Regex::new(r#"EXT-X-SERVER-CONTROL:CAN-PLAY=(\w+),CAN-SEEK=(\w+),CAN-PAUSE=(\w+),MIN-BUFFER-TIME=([\d\.]+)"#).unwrap();
+            if let Some(caps) = server_control_re.captures(trimmed) {
+                let can_play = caps.get(1).unwrap().as_str() == "YES";
+                let can_seek = caps.get(2).unwrap().as_str() == "YES";
+                let can_pause = caps.get(3).unwrap().as_str() == "YES";
+                let min_buffer_time = caps.get(4).unwrap().as_str().parse().unwrap();
+                return Ok(Some(Tag::ExtXServerControl {
+                    can_play: Some(can_play),
+                    can_seek: Some(can_seek),
+                    can_pause: Some(can_pause),
+                    min_buffer_time: Some(min_buffer_time),
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-SKIP") {
+            // Example: #EXT-X-SKIP:SKIPPED-SEGMENTS=3,URI="skip_segment2.ts"
+            let skip_re =
+                Regex::new(r#"EXT-X-SKIP:SKIPPED-SEGMENTS=(\d+),URI="([^\"]+)""#).unwrap();
+            if let Some(caps) = skip_re.captures(trimmed) {
+                let skipped_segments = caps.get(1).unwrap().as_str().parse().unwrap();
+                let uri = caps.get(2).unwrap().as_str();
+                return Ok(Some(Tag::ExtXSkip {
+                    uri: uri.to_string(),
+                    skipped_segments,
+                    duration: None,
+                    reason: None,
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-START") {
+            // Example: #EXT-X-START:TIME-OFFSET=0.0,PRECISE=YES
+            let start_re =
+                Regex::new(r#"EXT-X-START:TIME-OFFSET=([\d\.]+),PRECISE=(\w+)"#).unwrap();
+            if let Some(caps) = start_re.captures(trimmed) {
+                let time_offset = caps.get(1).unwrap().as_str().to_string();
+                let precise = caps.get(2).unwrap().as_str() == "YES";
+                return Ok(Some(Tag::ExtXStart {
+                    time_offset,
+                    precise: Some(precise),
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-INDEPENDENT-SEGMENTS") {
+            return Ok(Some(Tag::ExtXIndependentSegments));
+        }
+
+        if trimmed.starts_with("EXT-X-STREAM-INF") {
+            // Example: #EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360,CODECS="avc1.42c01e,mp4a.40.2"
+            let stream_inf_re = Regex::new(
+                r#"EXT-X-STREAM-INF:BANDWIDTH=(\d+),RESOLUTION=([^,]+),CODECS="([^"]+)"\s*(\S+)"#,
+            )
+            .unwrap();
+            if let Some(caps) = stream_inf_re.captures(trimmed) {
+                let bandwidth = caps.get(1).unwrap().as_str().parse().unwrap();
+                let resolution = caps.get(2).unwrap().as_str().to_string();
+                let codecs = caps.get(3).unwrap().as_str().to_string();
+                return Ok(Some(Tag::ExtXStreamInf {
+                    bandwidth,
+                    resolution: Some(resolution),
+                    codecs: Some(codecs),
+                    frame_rate: None,
+                    audio: None,
+                    video: None,
+                    subtitle: None,
+                    closed_captions: None,
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-MEDIA") {
+            // Example: #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="audio_en.m3u8"
+            let media_re = Regex::new(r#"EXT-X-MEDIA:TYPE=(\w+),GROUP-ID="([^"]+)",(?:NAME="([^"]+)")?,(?:LANGUAGE="([^"]+)")?,(?:DEFAULT=(YES|NO))?,(?:AUTOSELECT=(YES|NO))?,(?:URI="([^"]+)")?,(?:CHARACTERISTICS=([^,]+))?,(?:LANGUAGE-CODEC="([^"]+)")?,(?:INSTREAM-ID="([^"]+)")?,(?:FORCED=(YES|NO))?"#).unwrap();
+            if let Some(caps) = media_re.captures(trimmed) {
+                let type_ = caps.get(1).unwrap().as_str().to_string();
+                let group_id = caps.get(2).unwrap().as_str().to_string();
+                let name = Some(caps.get(3).unwrap().as_str().to_string());
+                let language = Some(caps.get(4).unwrap().as_str().to_string());
+                let default = Some(caps.get(5).unwrap().as_str() == "YES");
+                let auto_select = Some(caps.get(6).unwrap().as_str() == "YES");
+                let uri = Some(caps.get(7).unwrap().as_str().to_string());
+                let instream_id = Some(caps.get(8).unwrap().as_str().to_string());
+                let language_codec = Some(caps.get(9).unwrap().as_str().to_string());
+                let characteristics = Some(caps.get(10).unwrap().as_str().to_string());
+                let forced = Some(caps.get(11).unwrap().as_str() == "YES");
+
+                return Ok(Some(Tag::ExtXMedia {
+                    type_,
+                    group_id,
+                    name,
+                    language,
+                    instream_id,
+                    language_codec,
+                    default,
+                    autoplay: auto_select,
+                    characteristics,
+                    uri,
+                    forced,
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-RENDITION-REPORT") {
+            // Example: #EXT-X-RENDITION-REPORT:URI="rendition_report.m3u8",BANDWIDTH=1000000
+            let rendition_report_re =
+                Regex::new(r#"EXT-X-RENDITION-REPORT:URI="([^"]+)",BANDWIDTH=(\d+)"#).unwrap();
+            if let Some(caps) = rendition_report_re.captures(trimmed) {
+                let uri = caps.get(1).unwrap().as_str().to_string();
+                let bandwidth = caps.get(2).unwrap().as_str().parse().unwrap();
+                return Ok(Some(Tag::ExtXRenditionReport { uri, bandwidth }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-BYTERANGE") {
+            // Example: #EXT-X-BYTERANGE:500@1000
+            let byte_range_re = Regex::new(r#"EXT-X-BYTERANGE:([^\s]+)"#).unwrap();
+            if let Some(caps) = byte_range_re.captures(trimmed) {
+                let byte_range = caps.get(1).unwrap().as_str().to_string();
+                return Ok(Some(Tag::ExtXByteRange(byte_range)));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-I-FRAME-STREAM-INF") {
+            // Example: #EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=300000,URI="iframe.m3u8"
+            let iframe_re =
+                Regex::new(r#"EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=(\d+),URI="([^"]+)""#).unwrap();
+            if let Some(caps) = iframe_re.captures(trimmed) {
+                let bandwidth = caps.get(1).unwrap().as_str().parse().unwrap();
+                let uri = caps.get(2).unwrap().as_str().to_string();
+                return Ok(Some(Tag::ExtXIFrameStreamInf {
+                    bandwidth,
+                    codecs: None,
+                    resolution: None,
+                    frame_rate: None,
+                    uri,
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-SESSION-DATA") {
+            // Example: #EXT-X-SESSION-DATA:ID="session1",VALUE="value1",LANGUAGE="en"
+            let session_data_re =
+                Regex::new(r#"EXT-X-SESSION-DATA:ID="([^"]+)",VALUE="([^"]+)",LANGUAGE="([^"]+)""#)
+                    .unwrap();
+            if let Some(caps) = session_data_re.captures(trimmed) {
+                let id = caps.get(1).unwrap().as_str().to_string();
+                let value = caps.get(2).unwrap().as_str().to_string();
+                let language = Some(caps.get(3).unwrap().as_str().to_string());
+                return Ok(Some(Tag::ExtXSessionData {
+                    id,
+                    value,
+                    language,
+                }));
+            }
+        }
+
+        if trimmed.starts_with("EXT-X-PRELOAD-HINT") {
+            // Example: #EXT-X-PRELOAD-HINT:URI="preload_segment.ts",BYTERANGE="1000@2000"
+            let preload_hint_re =
+                Regex::new(r#"EXT-X-PRELOAD-HINT:URI="([^"]+)",BYTERANGE="([^"]+)""#).unwrap();
+            if let Some(caps) = preload_hint_re.captures(trimmed) {
+                let uri = caps.get(1).unwrap().as_str().to_string();
+                let byterange = Some(caps.get(2).unwrap().as_str().to_string());
+                return Ok(Some(Tag::ExtXPreloadHint { uri, byterange }));
+            }
+        }
+
+        if trimmed.starts_with("EXTINF") {
+            // let split = trimmed.split("\n").collect::<Vec<_>>();
+            //
+            // let metadata_line = split.get(0).unwrap();
+            // let segment = split.get(1).unwrap();
+
+            let extinf_re = Regex::new(r#"EXTINF:(\d+(\.\d+)?),\s*(.*?),?\s*(\S+)"#).unwrap();
+            if let Some(caps) = extinf_re.captures(trimmed) {
+                let duration: f32 = caps.get(1).unwrap().as_str().parse().unwrap();
+                let title = caps
+                    .get(3)
+                    .map(|m| m.as_str().trim().to_string())
+                    .unwrap_or_else(|| "".to_string());
+                let segment = caps.get(4).unwrap().as_str().trim().to_string();
+
+                if title.is_empty() {
+                    return Ok(Some(Tag::ExtInf(segment, duration, None)));
                 }
-                "#EXT-X-DATERANGE" => {
-                    let attributes = parse_attributes(stripped)?;
-                    let id = attributes.get("ID").ok_or("Missing ID attribute")?.clone();
-                    let start_date = attributes
-                        .get("START-DATE")
-                        .ok_or("Missing START-DATE attribute")?
-                        .clone();
-                    let end_date = attributes.get("END-DATE").cloned();
-                    let duration = attributes
-                        .get("DURATION")
-                        .map(|s| s.parse::<f32>().map_err(|_| "Invalid duration".to_string()))
-                        .transpose()?;
-                    let planned_duration = attributes
-                        .get("PLANNED-DURATION")
-                        .map(|s| {
-                            s.parse()
-                                .map_err(|_| "Invalid planned duration".to_string())
-                        })
-                        .transpose()?;
 
-                    return Ok(Some(Tag::ExtXDateRange {
-                        id,
-                        start_date,
-                        end_date,
-                        duration,
-                        planned_duration,
-                        scte35_cmd: attributes.get("SCTE35-CMD").cloned(),
-                        scte35_out: attributes.get("SCTE35-OUT").cloned(),
-                        scte35_in: attributes.get("SCTE35-IN").cloned(),
-                        end_on_next: attributes.get("END-ON-NEXT").map(|s| s == "YES"),
-                    }));
-                }
-                "#EXT-X-GAP" => {
-                    return Ok(Some(Tag::ExtXGap));
-                }
-                "#EXT-X-BITRATE" => {
-                    let bitrate = stripped
-                        .parse()
-                        .map_err(|_| "Invalid bitrate".to_string())?;
-                    return Ok(Some(Tag::ExtXBitrate(bitrate)));
-                }
-                "#EXT-X-INDEPENDENT-SEGMENTS" => {
-                    return Ok(Some(Tag::ExtXIndependentSegments));
-                }
-                "#EXT-X-START" => {
-                    let attributes = parse_attributes(stripped)?;
-                    let time_offset = attributes
-                        .get("TIME-OFFSET")
-                        .ok_or("Missing TIME-OFFSET attribute")?
-                        .clone();
-                    let precise = attributes
-                        .get("PRECISE")
-                        .map(|s| s == "YES")
-                        .unwrap_or(false);
-                    return Ok(Some(Tag::ExtXStart {
-                        time_offset,
-                        precise: Some(precise),
-                    }));
-                }
-                "#EXT-X-SERVER-CONTROL" => {
-                    let attributes = parse_attributes(stripped)?;
+                // Return parsed values wrapped in Tag::ExtInf
+                return Ok(Some(Tag::ExtInf(segment, duration, Some(title))));
+            }
+        }
 
-                    let can_play = attributes.get("CAN-PLAY").map(|s| s == "YES");
-                    let can_seek = attributes.get("CAN-SEEK").map(|s| s == "YES");
-                    let can_pause = attributes.get("CAN-PAUSE").map(|s| s == "YES");
-                    let min_buffer_time = attributes
-                        .get("MIN-BUFFER-TIME")
-                        .map(|s| {
-                            s.parse::<f32>()
-                                .map_err(|_| "Invalid MIN-BUFFER-TIME value")
-                        })
-                        .transpose()?;
-
-                    return Ok(Some(Tag::ExtXServerControl {
-                        can_play,
-                        can_seek,
-                        can_pause,
-                        min_buffer_time,
-                    }));
-                }
-                "#EXT-X-PART-INF" => {
-                    let attributes = parse_attributes(stripped)?;
-
-                    let part_target_duration = attributes
-                        .get("PART-TARGET-DURATION")
-                        .ok_or("Missing PART-TARGET-DURATION attribute")?
-                        .parse::<f32>()
-                        .map_err(|_| "Invalid PART-TARGET-DURATION value")?;
-
-                    let part_hold_back = attributes
-                        .get("PART-HOLD-BACK")
-                        .map(|s| s.parse::<f32>().map_err(|_| "Invalid PART-HOLD-BACK value"))
-                        .transpose()?;
-
-                    let part_number = attributes
-                        .get("PART-NUMBER")
-                        .map(|s| s.parse::<u64>().map_err(|_| "Invalid PART-NUMBER value"))
-                        .transpose()?;
-
-                    return Ok(Some(Tag::ExtXPartInf {
-                        part_target_duration,
-                        part_hold_back,
-                        part_number,
-                    }));
-                }
-                "#EXT-X-PRELOAD-HINT" => {
-                    let attributes = parse_attributes(stripped)?;
-
-                    let uri = attributes
-                        .get("URI")
-                        .ok_or("Missing URI attribute")?
-                        .clone();
-
-                    let byterange = attributes.get("BYTERANGE").cloned();
-
-                    return Ok(Some(Tag::ExtXPreloadHint { uri, byterange }));
-                }
-                "#EXT-X-RENDITION-REPORT" => {
-                    let attributes = parse_attributes(stripped)?;
-
-                    let uri = attributes
-                        .get("URI")
-                        .ok_or("Missing URI attribute")?
-                        .clone();
-                    let bandwidth = attributes
-                        .get("BANDWIDTH")
-                        .ok_or("Missing BANDWIDTH attribute")?
-                        .parse::<u32>()
-                        .map_err(|_| "Invalid BANDWIDTH value")?;
-
-                    return Ok(Some(Tag::ExtXRenditionReport { uri, bandwidth }));
-                }
-                "#EXT-X-PART" => {
-                    let attributes = parse_attributes(stripped)?;
-
-                    let uri = attributes
-                        .get("URI")
-                        .ok_or("Missing URI attribute")?
-                        .clone();
-                    let duration = attributes
-                        .get("DURATION")
-                        .map(|s| s.parse::<f32>().map_err(|_| "Invalid DURATION value"))
-                        .transpose()?;
-
-                    return Ok(Some(Tag::ExtXPart { uri, duration }));
-                }
-                "#EXT-X-SKIP" => {
-                    let attributes = parse_attributes(stripped)?;
-
-                    let uri = attributes
-                        .get("URI")
-                        .ok_or("Missing URI attribute")?
-                        .clone();
-                    let skipped_segments = attributes
-                        .get("SKIPPED-SEGMENTS")
-                        .ok_or("Missing SKIPPED-SEGMENTS attribute")?
-                        .parse::<u32>()
-                        .map_err(|_| "Invalid SKIPPED-SEGMENTS value")?;
-
-                    // Optional fields
-                    let duration = attributes
-                        .get("DURATION")
-                        .and_then(|d| d.parse::<f32>().ok());
-                    let reason = attributes.get("REASON").cloned();
-
-                    return Ok(Some(Tag::ExtXSkip {
-                        uri,
-                        duration,
-                        skipped_segments,
-                        reason,
-                    }));
-                }
-                "#EXT-X-DISCONTINUITY" => {
-                    return Ok(Some(Tag::ExtXDiscontinuity));
-                }
-                "#EXT-X-SESSION-DATA" => {
-                    // Example input: #EXT-X-SESSION-DATA:ID="sessionId",VALUE="someValue",LANGUAGE="en"
-                    // Remove the prefix and split by commas
-                    let parts: Vec<&str> = stripped.split(',').collect();
-                    let mut id = None;
-                    let mut value = None;
-                    let mut language = None;
-
-                    for part in parts {
-                        // Split each part into key-value pairs
-                        let kv: Vec<&str> = part.splitn(2, '=').collect();
-                        if kv.len() == 2 {
-                            let key = kv[0].trim();
-                            let val = kv[1].trim().trim_matches('"'); // Remove surrounding quotes
-
-                            match key {
-                                "ID" => id = Some(val.to_string()),
-                                "VALUE" => value = Some(val.to_string()),
-                                "LANGUAGE" => language = Some(val.to_string()),
-                                _ => {
-                                    return Err(format!(
-                                        "Unknown key in EXT-X-SESSION-DATA: {}",
-                                        key
-                                    ))
-                                }
-                            }
-                        } else {
-                            return Err(format!("Invalid format for EXT-X-SESSION-DATA: {}", part));
-                        }
-                    }
-
-                    // Ensure required fields are present
-                    return if let (Some(id), Some(value)) = (id, value) {
-                        // Create the ExtXSessionData tag
-                        let session_data = Tag::ExtXSessionData {
-                            id,
-                            value,
-                            language,
-                        };
-                        Ok(Some(session_data))
-                    } else {
-                        Err("Missing required fields in EXT-X-SESSION-DATA".to_string())
-                    };
-                }
-                "#EXT-X-SESSION-KEY" => {
-                    // Example input: #EXT-X-SESSION-KEY:METHOD=AES-128,URI="https://example.com/key",IV="0x1234567890ABCDEF"
-
-                    // Parse the attributes
-                    let attributes = parse_attributes(stripped)?;
-
-                    // Extract required fields
-                    let method = attributes
-                        .get("METHOD")
-                        .ok_or("Missing METHOD attribute")?
-                        .clone();
-
-                    let uri = attributes.get("URI").cloned();
-                    let iv = attributes.get("IV").cloned();
-
-                    // Create the ExtXSessionKey tag
-                    let session_key = Tag::ExtXSessionKey { method, uri, iv };
-
-                    return Ok(Some(session_key));
-                }
-                "#EXT-X-TARGETDURATION" => {
-                    // Example input: #EXT-X-TARGETDURATION:10
-                    let target_duration: u64 =
-                        stripped.parse().map_err(|_| "Invalid target duration")?;
-
-                    // Create the ExtXTargetDuration tag
-                    let target_duration_tag = Tag::ExtXTargetDuration(target_duration);
-
-                    return Ok(Some(target_duration_tag));
-                }
-                "#EXT-X-PLAYLIST-TYPE" => {
-                    let attributes = parse_attributes(stripped)?;
-                    let playlist_type = attributes
-                        .get("PLAYLIST-TYPE")
-                        .ok_or("Missing PLAYLIST-TYPE attribute")?
-                        .clone();
-
-                    if playlist_type != "EVENT" && playlist_type != "VOD" {
-                        return Err("Invalid PLAYLIST-TYPE value".to_string());
-                    }
-
-                    return Ok(Some(Tag::ExtXPlaylistType(playlist_type)));
-                }
-                _ => {}
+        if trimmed.starts_with("EXT-X-SESSION-KEY") {
+            // Example: #EXT-X-SESSION-KEY:METHOD=AES-128,URI="https://example.com/session_key",IV="0x9876543210ABCDEF"
+            let session_key_re =
+                Regex::new(r#"EXT-X-SESSION-KEY:METHOD=([^,]+),URI="([^"]+)",IV="([^"]+)""#)
+                    .unwrap();
+            if let Some(caps) = session_key_re.captures(trimmed) {
+                let method = caps.get(1).unwrap().as_str().to_string();
+                let uri = Some(caps.get(2).unwrap().as_str().to_string());
+                let iv = Some(caps.get(3).unwrap().as_str().to_string());
+                return Ok(Some(Tag::ExtXSessionKey { method, uri, iv }));
             }
         }
 
@@ -538,38 +477,6 @@ impl Playlist {
             }
             Tag::ExtXProgramDateTime(date_time) if date_time.is_empty() => {
                 errors.push(ValidationError::InvalidProgramDateTime);
-            }
-            Tag::ExtXDateRange {
-                id,
-                start_date,
-                duration,
-                planned_duration,
-                ..
-            } => {
-                if id.is_empty() {
-                    errors.push(ValidationError::InvalidDateRangeId);
-                }
-                if start_date.is_empty() {
-                    errors.push(ValidationError::InvalidDateRangeStartDate);
-                }
-                if let Some(dur) = duration {
-                    if *dur < 0.0 {
-                        errors.push(ValidationError::InvalidDateRangeDuration(*dur));
-                    }
-                }
-                if let Some(planned_dur) = planned_duration {
-                    if *planned_dur < 0.0 {
-                        errors.push(ValidationError::InvalidDateRangePlannedDuration(
-                            *planned_dur,
-                        ));
-                    }
-                }
-
-                // if end_date.is_some_and(move |t| {t.is_empty()})  {
-                //     // Add checks for end_date format or validity as needed
-                // } else {
-                //     errors.push(ValidationError::InvalidDateRangeEndDate);
-                // }
             }
             Tag::ExtXGap => {
                 // Validation for EXT-X-GAP if necessary

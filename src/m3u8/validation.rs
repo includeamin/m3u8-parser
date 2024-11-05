@@ -51,13 +51,6 @@ pub enum ValidationError {
     /// Error indicating that the end date specified in a date range is invalid.
     InvalidDateRangeEndDate,
 
-    /// Error indicating that the duration specified in a date range is invalid.
-    ///
-    /// # Arguments
-    ///
-    /// * `f32` - The invalid duration value that was encountered in the date range.
-    InvalidDateRangeDuration(f32),
-
     /// Error indicating that the planned duration specified in a date range is invalid.
     ///
     /// # Arguments

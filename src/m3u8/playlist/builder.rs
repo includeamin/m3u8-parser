@@ -110,34 +110,6 @@ impl PlaylistBuilder {
         self
     }
 
-    /// Adds an `ExtXDateRange` tag.
-    #[allow(clippy::too_many_arguments)]
-    pub fn date_range(
-        self,
-        id: &str,
-        start_date: &str,
-        end_date: Option<&str>,
-        duration: Option<f32>,
-        planned_duration: Option<f32>,
-        scte35_cmd: Option<&str>,
-        scte35_out: Option<&str>,
-        scte35_in: Option<&str>,
-        end_on_next: Option<bool>,
-    ) -> Self {
-        self.tags.borrow_mut().push(Tag::ExtXDateRange {
-            id: id.to_string(),
-            start_date: start_date.to_string(),
-            end_date: end_date.map(|s| s.to_string()),
-            duration,
-            planned_duration,
-            scte35_cmd: scte35_cmd.map(|s| s.to_string()),
-            scte35_out: scte35_out.map(|s| s.to_string()),
-            scte35_in: scte35_in.map(|s| s.to_string()),
-            end_on_next,
-        });
-        self
-    }
-
     /// Adds an `ExtXGap` tag.
     pub fn gap(self) -> Self {
         self.tags.borrow_mut().push(Tag::ExtXGap);
@@ -172,6 +144,9 @@ impl PlaylistBuilder {
         autoplay: Option<bool>,
         characteristics: Option<&str>,
         language: Option<&str>,
+        forced: Option<bool>,
+        language_codec: Option<&str>,
+        instream_id: Option<&str>,
     ) -> Self {
         self.tags.borrow_mut().push(Tag::ExtXMedia {
             type_: type_.to_string(),
@@ -182,6 +157,9 @@ impl PlaylistBuilder {
             autoplay,
             characteristics: characteristics.map(|s| s.to_string()),
             language: language.map(|s| s.to_string()),
+            instream_id: instream_id.map(|s| s.to_string()),
+            language_codec: language_codec.map(|s| s.to_string()),
+            forced,
         });
         self
     }

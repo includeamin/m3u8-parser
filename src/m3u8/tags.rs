@@ -37,18 +37,6 @@ pub enum Tag {
     },
     /// Specifies the program date and time.
     ExtXProgramDateTime(String),
-    /// Represents a date range for events within the playlist.
-    ExtXDateRange {
-        id: String,
-        start_date: String,
-        end_date: Option<String>,
-        duration: Option<f32>,
-        planned_duration: Option<f32>,
-        scte35_cmd: Option<String>,
-        scte35_out: Option<String>,
-        scte35_in: Option<String>,
-        end_on_next: Option<bool>,
-    },
     /// Represents a byte range.
     ExtXByteRange(String),
     /// Defines a custom tag with a specific value.
@@ -63,6 +51,9 @@ pub enum Tag {
         autoplay: Option<bool>,
         characteristics: Option<String>,
         language: Option<String>,
+        instream_id: Option<String>,
+        language_codec: Option<String>,
+        forced: Option<bool>,
     },
     /// Represents stream information.
     ExtXStreamInf {
@@ -172,9 +163,9 @@ impl std::fmt::Display for Tag {
             Tag::ExtXVersion(version) => write!(f, "#EXT-X-VERSION:{}", version),
             Tag::ExtInf(url, duration, title) => {
                 if let Some(title) = title {
-                    write!(f, "#EXTINF:{},{},{},", url, duration, title)
+                    write!(f, "#EXTINF:{},{}\n {}", duration, title, url)
                 } else {
-                    write!(f, "#EXTINF:{},{},", url, duration)
+                    write!(f, "#EXTINF:{},\n{}", duration, url)
                 }
             }
             Tag::ExtXTargetDuration(duration) => {
@@ -219,49 +210,6 @@ impl std::fmt::Display for Tag {
             Tag::ExtXProgramDateTime(date_time) => {
                 write!(f, "#EXT-X-PROGRAM-DATE-TIME:{}", date_time)
             }
-            Tag::ExtXDateRange {
-                id,
-                start_date,
-                end_date,
-                duration,
-                planned_duration,
-                scte35_cmd,
-                scte35_out,
-                scte35_in,
-                end_on_next,
-            } => {
-                write!(
-                    f,
-                    "#EXT-X-DATERANGE:ID=\"{}\",START-DATE=\"{}\"",
-                    id, start_date
-                )?;
-                if let Some(end_date) = end_date {
-                    write!(f, ",END-DATE=\"{}\"", end_date)?;
-                }
-                if let Some(duration) = duration {
-                    write!(f, ",DURATION={}", duration)?;
-                }
-                if let Some(planned_duration) = planned_duration {
-                    write!(f, ",PLANNED-DURATION={}", planned_duration)?;
-                }
-                if let Some(scte35_cmd) = scte35_cmd {
-                    write!(f, ",SCTE35-CMD={}", scte35_cmd)?;
-                }
-                if let Some(scte35_out) = scte35_out {
-                    write!(f, ",SCTE35-OUT={}", scte35_out)?;
-                }
-                if let Some(scte35_in) = scte35_in {
-                    write!(f, ",SCTE35-IN={}", scte35_in)?;
-                }
-                if let Some(end_on_next) = end_on_next {
-                    write!(
-                        f,
-                        ",END-ON-NEXT={}",
-                        if *end_on_next { "YES" } else { "NO" }
-                    )?;
-                }
-                Ok(())
-            }
             Tag::ExtXByteRange(byterange) => {
                 write!(f, "#EXT-X-BYTERANGE:{}", byterange)
             }
@@ -277,30 +225,56 @@ impl std::fmt::Display for Tag {
                 autoplay,
                 characteristics,
                 language,
+                instream_id,
+                language_codec,
+                forced,
             } => {
-                // Basic fields
+                // Basic required fields
                 write!(f, "#EXT-X-MEDIA:TYPE={},GROUP-ID=\"{}\"", type_, group_id)?;
 
-                // Required URI field
+                // Optional URI field
                 if let Some(uri) = uri {
                     write!(f, ",URI=\"{}\"", uri)?;
                 }
 
-                // Optional fields
+                // Optional name field
                 if let Some(name) = name {
                     write!(f, ",NAME=\"{}\"", name)?;
                 }
+
+                // Optional default field
                 if let Some(default) = default {
                     write!(f, ",DEFAULT={}", if *default { "YES" } else { "NO" })?;
                 }
+
+                // Optional autoplay field
                 if let Some(autoplay) = autoplay {
                     write!(f, ",AUTOPLAY={}", if *autoplay { "YES" } else { "NO" })?;
                 }
+
+                // Optional forced field
+                if let Some(forced) = forced {
+                    write!(f, ",FORCED={}", if *forced { "YES" } else { "NO" })?;
+                }
+
+                // Optional instream_id field
+                if let Some(instream_id) = instream_id {
+                    write!(f, ",INSTREAM-ID=\"{}\"", instream_id)?;
+                }
+
+                // Optional characteristics field
                 if let Some(characteristics) = characteristics {
                     write!(f, ",CHARACTERISTICS={}", characteristics)?;
                 }
+
+                // Optional language field
                 if let Some(language) = language {
                     write!(f, ",LANGUAGE=\"{}\"", language)?;
+                }
+
+                // Optional language_codec field
+                if let Some(language_codec) = language_codec {
+                    write!(f, ",LANGUAGE-CODEC=\"{}\"", language_codec)?;
                 }
 
                 Ok(())
