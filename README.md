@@ -15,12 +15,47 @@ by [RFC 8216](https://tools.ietf.org/html/rfc8216).
 - Parse M3U8 playlists from strings, files, or readers
 - Generate M3U8 playlists and write them to strings, files, or writers
 - Support for all tags specified in RFC 8216, including:
-    - Basic Tags (e.g., `#EXTM3U`, `#EXT-X-VERSION`)
-    - Media Segment Tags (e.g., `#EXTINF`, `#EXT-X-BYTERANGE`)
-    - Media Playlist Tags (e.g., `#EXT-X-TARGETDURATION`, `#EXT-X-MEDIA-SEQUENCE`)
-    - Master Playlist Tags (e.g., `#EXT-X-STREAM-INF`, `#EXT-X-MEDIA`)
-    - Encryption Tags (e.g., `#EXT-X-KEY`, `#EXT-X-SESSION-KEY`)
-    - Date Range Tags (e.g., `#EXT-X-DATERANGE`)
+    - **Basic Tags**:
+        - `#EXTM3U`
+        - `#EXT-X-VERSION`
+    - **Media Playlist Tags**:
+        - `#EXT-X-TARGETDURATION`
+        - `#EXT-X-MEDIA-SEQUENCE`
+        - `#EXT-X-ALLOW-CACHE`
+        - `#EXT-X-DISCONTINUITY-SEQUENCE`
+        - `#EXT-X-MEDIA`
+        - `#EXT-X-STREAM-INF`
+        - `#EXT-X-I-FRAME-STREAM-INF`
+        - `#EXT-X-INDEPENDENT-SEGMENTS`
+        - `#EXT-X-BYTERANGE`
+        - `#EXT-X-SESSION-DATA`
+        - `#EXT-X-SESSION-KEY`
+        - `#EXT-X-DEFINE`
+    - **Media Segment Tags**:
+        - `#EXTINF`
+        - `#EXT-X-KEY`
+        - `#EXT-X-BYTERANGE`
+        - `#EXT-X-MAP`
+        - `#EXT-X-GAP`
+        - `#EXT-X-PROGRAM-DATE-TIME`
+        - `#EXT-X-PART`
+        - `#EXT-X-PRELOAD-HINT`
+        - `#EXT-X-START`
+        - `#EXT-X-DATERANGE`
+    - **Encryption Tags**:
+        - `#EXT-X-KEY`
+        - `#EXT-X-SESSION-KEY`
+    - **Date Range Tags**:
+        - `#EXT-X-DATERANGE`
+    - **End Playlist Tags**:
+        - `#EXT-X-ENDLIST`
+    - **Master Playlist Tags**:
+        - `#EXT-X-STREAM-INF`
+        - `#EXT-X-MEDIA`
+        - `#EXT-X-STREAM-INF`
+        - `#EXT-X-I-FRAME-STREAM-INF`
+    - **Program Date and Time**:
+        - `#EXT-X-PROGRAM-DATE-TIME`
 
 ## Installation
 
@@ -81,3 +116,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   Ok(())
 }
 ```
+
