@@ -2,11 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [unreleased]
+## [0.6.0] - 2024-11-05
+
+### 🚀 Features
+
+- Add support for more tags from rfc (#3)
+
+## [0.5.0] - 2024-11-02
 
 ### ⚙️ Miscellaneous Tasks
 
-- [**breaking**] Restructure codes
+- [**breaking**] Restructure project (#2)
 
 ## [0.4.0] - 2024-11-01
 
