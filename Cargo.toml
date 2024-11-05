@@ -10,3 +10,4 @@ repository = "https://github.com/includeamin/m3u8-parser"
 readme = "README.md"
 
 [dependencies]
+regex = "1.11.1"
