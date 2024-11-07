@@ -163,9 +163,11 @@ impl std::fmt::Display for Tag {
             Tag::ExtXVersion(version) => write!(f, "#EXT-X-VERSION:{}", version),
             Tag::ExtInf(url, duration, title) => {
                 if let Some(title) = title {
-                    write!(f, "#EXTINF:{},{}\n {}", duration, title, url)
+                    // Format with 3 decimal places
+                    write!(f, "#EXTINF:{:.4},{}\n {}", duration, title, url)
                 } else {
-                    write!(f, "#EXTINF:{},\n{}", duration, url)
+                    // Format with 3 decimal places
+                    write!(f, "#EXTINF:{:.4},\n{}", duration, url)
                 }
             }
             Tag::ExtXTargetDuration(duration) => {
