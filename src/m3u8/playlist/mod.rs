@@ -222,56 +222,126 @@ impl Playlist {
                 return Ok(Some(Tag::ExtXPart {
                     uri: uri.to_string(),
                     duration: Some(duration),
+                    independent: None,
                 }));
             }
         }
 
         if trimmed.starts_with("EXT-X-PART-INF") {
-            // Example: #EXT-X-PART-INF:PART-TARGET-DURATION=5.0,PART-HOLD-BACK=2.0
+            // Example: #EXT-X-PART-INF:PART-TARGET=5.0
+            // Note: PART-HOLD-BACK is now in EXT-X-SERVER-CONTROL, not here
             let part_inf_re = Regex::new(
-                r#"EXT-X-PART-INF:PART-TARGET-DURATION=([\d\.]+),PART-HOLD-BACK=([\d\.]+)"#,
+                r#"EXT-X-PART-INF:PART-TARGET=([\d\.]+)"#,
             )
             .unwrap();
             if let Some(caps) = part_inf_re.captures(trimmed) {
                 let part_target_duration = caps.get(1).unwrap().as_str().parse().unwrap();
-                let part_hold_back = caps.get(2).map(|m| m.as_str().parse().unwrap());
                 return Ok(Some(Tag::ExtXPartInf {
                     part_target_duration,
-                    part_hold_back,
+                    part_number: None,
+                }));
+            }
+            // Also try PART-TARGET-DURATION for backwards compatibility
+            let part_inf_re_alt = Regex::new(
+                r#"EXT-X-PART-INF:PART-TARGET-DURATION=([\d\.]+)"#,
+            )
+            .unwrap();
+            if let Some(caps) = part_inf_re_alt.captures(trimmed) {
+                let part_target_duration = caps.get(1).unwrap().as_str().parse().unwrap();
+                return Ok(Some(Tag::ExtXPartInf {
+                    part_target_duration,
                     part_number: None,
                 }));
             }
         }
 
         if trimmed.starts_with("EXT-X-SERVER-CONTROL") {
-            // Example: #EXT-X-SERVER-CONTROL:CAN-PLAY=YES,CAN-SEEK=YES,CAN-PAUSE=YES,MIN-BUFFER-TIME=10.0
-            let server_control_re = Regex::new(r#"EXT-X-SERVER-CONTROL:CAN-PLAY=(\w+),CAN-SEEK=(\w+),CAN-PAUSE=(\w+),MIN-BUFFER-TIME=([\d\.]+)"#).unwrap();
-            if let Some(caps) = server_control_re.captures(trimmed) {
-                let can_play = caps.get(1).unwrap().as_str() == "YES";
-                let can_seek = caps.get(2).unwrap().as_str() == "YES";
-                let can_pause = caps.get(3).unwrap().as_str() == "YES";
-                let min_buffer_time = caps.get(4).unwrap().as_str().parse().unwrap();
+            // Example: #EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=1.0,CAN-SKIP-UNTIL=24.0
+            // Parse attributes flexibly
+            let mut can_play = None;
+            let mut can_seek = None;
+            let mut can_pause = None;
+            let mut min_buffer_time = None;
+            let mut can_block_reload = None;
+            let mut part_hold_back = None;
+            let mut can_skip_until = None;
+
+            // Extract all key=value pairs
+            let attr_re = Regex::new(r#"([A-Z-]+)=([^,]+)"#).unwrap();
+            for cap in attr_re.captures_iter(trimmed) {
+                let key = cap.get(1).unwrap().as_str();
+                let value = cap.get(2).unwrap().as_str();
+                match key {
+                    "CAN-PLAY" => can_play = Some(value == "YES"),
+                    "CAN-SEEK" => can_seek = Some(value == "YES"),
+                    "CAN-PAUSE" => can_pause = Some(value == "YES"),
+                    "MIN-BUFFER-TIME" => {
+                        if let Ok(val) = value.parse::<f32>() {
+                            min_buffer_time = Some(val);
+                        }
+                    }
+                    "CAN-BLOCK-RELOAD" => can_block_reload = Some(value == "YES"),
+                    "PART-HOLD-BACK" => {
+                        if let Ok(val) = value.parse::<f32>() {
+                            part_hold_back = Some(val);
+                        }
+                    }
+                    "CAN-SKIP-UNTIL" => {
+                        if let Ok(val) = value.parse::<f32>() {
+                            can_skip_until = Some(val);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Only create tag if at least one attribute was found
+            if can_play.is_some()
+                || can_seek.is_some()
+                || can_pause.is_some()
+                || min_buffer_time.is_some()
+                || can_block_reload.is_some()
+                || part_hold_back.is_some()
+                || can_skip_until.is_some()
+            {
                 return Ok(Some(Tag::ExtXServerControl {
-                    can_play: Some(can_play),
-                    can_seek: Some(can_seek),
-                    can_pause: Some(can_pause),
-                    min_buffer_time: Some(min_buffer_time),
+                    can_play,
+                    can_seek,
+                    can_pause,
+                    min_buffer_time,
+                    can_block_reload,
+                    part_hold_back,
+                    can_skip_until,
                 }));
             }
         }
 
         if trimmed.starts_with("EXT-X-SKIP") {
-            // Example: #EXT-X-SKIP:SKIPPED-SEGMENTS=3,URI="skip_segment2.ts"
-            let skip_re =
-                Regex::new(r#"EXT-X-SKIP:SKIPPED-SEGMENTS=(\d+),URI="([^\"]+)""#).unwrap();
-            if let Some(caps) = skip_re.captures(trimmed) {
-                let skipped_segments = caps.get(1).unwrap().as_str().parse().unwrap();
-                let uri = caps.get(2).unwrap().as_str();
+            // Example: #EXT-X-SKIP:SKIPPED-SEGMENTS=3
+            // Optional: ,RECENTLY-REMOVED-DATERANGES="id1\tid2"
+            let mut skipped_segments = None;
+            let mut recently_removed_dateranges = None;
+
+            let attr_re = Regex::new(r#"([A-Z-]+)=("([^"]*)"|([^,]+))"#).unwrap();
+            for cap in attr_re.captures_iter(trimmed) {
+                let key = cap.get(1).unwrap().as_str();
+                // Use quoted value (group 3) if present, otherwise unquoted (group 4)
+                let value = cap.get(3).or(cap.get(4)).unwrap().as_str();
+                match key {
+                    "SKIPPED-SEGMENTS" => {
+                        skipped_segments = value.parse::<u32>().ok();
+                    }
+                    "RECENTLY-REMOVED-DATERANGES" => {
+                        recently_removed_dateranges = Some(value.to_string());
+                    }
+                    _ => {}
+                }
+            }
+
+            if let Some(skipped) = skipped_segments {
                 return Ok(Some(Tag::ExtXSkip {
-                    uri: uri.to_string(),
-                    skipped_segments,
-                    duration: None,
-                    reason: None,
+                    skipped_segments: skipped,
+                    recently_removed_dateranges,
                 }));
             }
         }
@@ -410,7 +480,7 @@ impl Playlist {
             if let Some(caps) = preload_hint_re.captures(trimmed) {
                 let uri = caps.get(1).unwrap().as_str().to_string();
                 let byterange = Some(caps.get(2).unwrap().as_str().to_string());
-                return Ok(Some(Tag::ExtXPreloadHint { uri, byterange }));
+                return Ok(Some(Tag::ExtXPreloadHint { type_: None, uri, byterange }));
             }
         }
 
@@ -420,7 +490,7 @@ impl Playlist {
             // let metadata_line = split.get(0).unwrap();
             // let segment = split.get(1).unwrap();
 
-            let extinf_re = Regex::new(r#"EXTINF:(\d+(\.\d+)?),\s*(.*?),?\s*(\S+)"#).unwrap();
+            let extinf_re = Regex::new(r#"EXTINF:(\d+(\.\d+)?),?\s*(.*?),?\s*(\S+)"#).unwrap();
             if let Some(caps) = extinf_re.captures(trimmed) {
                 let duration: f32 = caps.get(1).unwrap().as_str().parse().unwrap();
                 let title = caps
@@ -491,9 +561,9 @@ impl Playlist {
             Tag::ExtXStart { time_offset, .. } if time_offset.is_empty() => {
                 errors.push(ValidationError::InvalidStartOffset);
             }
-            Tag::ExtXSkip { duration, .. } if duration.unwrap() <= 0.0 => {
+            Tag::ExtXSkip { skipped_segments, .. } if *skipped_segments == 0 => {
                 errors.push(ValidationError::InvalidSkipTag(
-                    "Duration must be positive".to_string(),
+                    "SKIPPED-SEGMENTS must be positive".to_string(),
                 ));
             }
             Tag::ExtXPreloadHint { uri, .. } if uri.is_empty() => {

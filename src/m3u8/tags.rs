@@ -91,15 +91,18 @@ pub enum Tag {
         can_seek: Option<bool>,
         can_pause: Option<bool>,
         min_buffer_time: Option<f32>,
+        can_block_reload: Option<bool>,
+        part_hold_back: Option<f32>,
+        can_skip_until: Option<f32>,
     },
     /// Represents part information.
     ExtXPartInf {
         part_target_duration: f32,
-        part_hold_back: Option<f32>,
         part_number: Option<u64>,
     },
     /// Represents a preload hint.
     ExtXPreloadHint {
+        type_: Option<String>,
         uri: String,
         /// Optional byte range for the preload hint.
         byterange: Option<String>,
@@ -110,14 +113,12 @@ pub enum Tag {
     ExtXPart {
         uri: String,
         duration: Option<f32>,
-        // additional fields if necessary
+        independent: Option<bool>,
     },
-    /// Indicates a skip in the playlist.
+    /// Indicates skipped segments in a Playlist Delta Update (RFC 8216bis Section 4.4.5.2).
     ExtXSkip {
-        uri: String,
-        duration: Option<f32>,
         skipped_segments: u32,
-        reason: Option<String>,
+        recently_removed_dateranges: Option<String>,
     },
     /// Indicates a discontinuity in the media stream.
     ExtXDiscontinuity,
@@ -355,38 +356,57 @@ impl std::fmt::Display for Tag {
                 can_seek,
                 can_pause,
                 min_buffer_time,
+                can_block_reload,
+                part_hold_back,
+                can_skip_until,
             } => {
                 write!(f, "#EXT-X-SERVER-CONTROL")?;
+                let mut first = true;
+                if let Some(can_block_reload) = can_block_reload {
+                    write!(f, "{}CAN-BLOCK-RELOAD={}", if first { ":" } else { "," }, if *can_block_reload { "YES" } else { "NO" })?;
+                    first = false;
+                }
+                if let Some(part_hold_back) = part_hold_back {
+                    write!(f, "{}PART-HOLD-BACK={}", if first { ":" } else { "," }, part_hold_back)?;
+                    first = false;
+                }
+                if let Some(can_skip_until) = can_skip_until {
+                    write!(f, "{}CAN-SKIP-UNTIL={}", if first { ":" } else { "," }, can_skip_until)?;
+                    first = false;
+                }
                 if let Some(can_play) = can_play {
-                    write!(f, ",CAN-PLAY={}", if *can_play { "YES" } else { "NO" })?;
+                    write!(f, "{}CAN-PLAY={}", if first { ":" } else { "," }, if *can_play { "YES" } else { "NO" })?;
+                    first = false;
                 }
                 if let Some(can_seek) = can_seek {
-                    write!(f, ",CAN-SEEK={}", if *can_seek { "YES" } else { "NO" })?;
+                    write!(f, "{}CAN-SEEK={}", if first { ":" } else { "," }, if *can_seek { "YES" } else { "NO" })?;
+                    first = false;
                 }
                 if let Some(can_pause) = can_pause {
-                    write!(f, ",CAN-PAUSE={}", if *can_pause { "YES" } else { "NO" })?;
+                    write!(f, "{}CAN-PAUSE={}", if first { ":" } else { "," }, if *can_pause { "YES" } else { "NO" })?;
+                    first = false;
                 }
                 if let Some(min_buffer_time) = min_buffer_time {
-                    write!(f, ",MIN-BUFFER-TIME={}", min_buffer_time)?;
+                    write!(f, "{}MIN-BUFFER-TIME={}", if first { ":" } else { "," }, min_buffer_time)?;
                 }
                 Ok(())
             }
             Tag::ExtXPartInf {
                 part_target_duration,
-                part_hold_back,
                 part_number,
             } => {
                 write!(f, "#EXT-X-PART-INF:PART-TARGET={}", part_target_duration)?;
-                if let Some(part_hold_back) = part_hold_back {
-                    write!(f, ",PART-HOLD-BACK={}", part_hold_back)?;
-                }
                 if let Some(part_number) = part_number {
                     write!(f, ",PART-NUMBER={}", part_number)?;
                 }
                 Ok(())
             }
-            Tag::ExtXPreloadHint { uri, byterange } => {
-                let mut result = format!("#EXT-X-PRELOAD-HINT:URI=\"{}\"", uri);
+            Tag::ExtXPreloadHint { type_, uri, byterange } => {
+                let mut result = String::from("#EXT-X-PRELOAD-HINT:");
+                if let Some(type_val) = type_ {
+                    result.push_str(&format!("TYPE={},", type_val));
+                }
+                result.push_str(&format!("URI=\"{}\"", uri));
                 if let Some(byterange) = byterange {
                     result.push_str(&format!(",BYTERANGE={}", byterange));
                 }
@@ -399,33 +419,27 @@ impl std::fmt::Display for Tag {
                     uri, bandwidth
                 )
             }
-            Tag::ExtXPart { uri, duration } => {
+            Tag::ExtXPart { uri, duration, independent } => {
                 write!(f, "#EXT-X-PART:URI=\"{}\"", uri)?;
                 if let Some(duration) = duration {
                     write!(f, ",DURATION={}", duration)?;
                 }
+                if let Some(independent) = independent {
+                    if *independent {
+                        write!(f, ",INDEPENDENT=YES")?;
+                    }
+                }
                 Ok(())
             }
             Tag::ExtXSkip {
-                uri,
-                duration,
                 skipped_segments,
-                reason,
+                recently_removed_dateranges,
             } => {
-                let mut output = format!(
-                    "#EXT-X-SKIP:URI=\"{}\",SKIPPED-SEGMENTS={}",
-                    uri, skipped_segments
-                );
-
-                if let Some(duration) = duration {
-                    output.push_str(&format!(",DURATION={}", duration));
+                write!(f, "#EXT-X-SKIP:SKIPPED-SEGMENTS={}", skipped_segments)?;
+                if let Some(dateranges) = recently_removed_dateranges {
+                    write!(f, ",RECENTLY-REMOVED-DATERANGES=\"{}\"", dateranges)?;
                 }
-
-                if let Some(reason) = reason {
-                    output.push_str(&format!(",REASON=\"{}\"", reason));
-                }
-
-                write!(f, "{}", output)
+                Ok(())
             }
             Tag::ExtXDiscontinuity => write!(f, "#EXT-X-DISCONTINUITY"),
             Tag::ExtXSessionData {
