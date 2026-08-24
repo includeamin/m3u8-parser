@@ -18,10 +18,14 @@ pub enum Tag {
     ExtXTargetDuration(u64),
     /// Specifies the media sequence number.
     ExtXMediaSequence(u64),
+    /// Specifies whether clients may cache media segments.
+    ExtXAllowCache(bool),
     /// Represents a discontinuity sequence number.
     ExtXDiscontinuitySequence(u32),
     /// Marks the end of the playlist.
     ExtXEndList,
+    /// Indicates that each media segment is an I-frame.
+    ExtXIFramesOnly,
     /// Contains information about encryption keys.
     ExtXKey {
         method: String,
@@ -54,10 +58,12 @@ pub enum Tag {
         instream_id: Option<String>,
         language_codec: Option<String>,
         forced: Option<bool>,
+        channels: Option<String>,
     },
     /// Represents stream information.
     ExtXStreamInf {
         bandwidth: u32,
+        average_bandwidth: Option<u32>,
         codecs: Option<String>,
         resolution: Option<String>,
         frame_rate: Option<f32>,
@@ -69,6 +75,7 @@ pub enum Tag {
     /// Represents an I-frame stream information.
     ExtXIFrameStreamInf {
         bandwidth: u32,
+        average_bandwidth: Option<u32>,
         codecs: Option<String>,
         resolution: Option<String>,
         frame_rate: Option<f32>,
@@ -76,6 +83,20 @@ pub enum Tag {
     },
     /// Indicates a gap in the playlist.
     ExtXGap,
+    /// Associates a range of media with a date range and optional metadata.
+    ExtXDateRange {
+        id: String,
+        class: Option<String>,
+        start_date: String,
+        end_date: Option<String>,
+        duration: Option<f64>,
+        planned_duration: Option<f64>,
+        end_on_next: Option<bool>,
+        scte35_cmd: Option<String>,
+        scte35_out: Option<String>,
+        scte35_in: Option<String>,
+        client_attributes: Vec<(String, String)>,
+    },
     /// Specifies the bitrate of the stream.
     ExtXBitrate(u32),
     /// Indicates that segments are independent.
@@ -124,15 +145,21 @@ pub enum Tag {
     /// Represents session data for tracking and metadata.
     ExtXSessionData {
         id: String,
-        value: String,
-        // Optional fields for additional parameters
+        value: Option<String>,
+        uri: Option<String>,
         language: Option<String>,
     },
     ExtXSessionKey {
         method: String,
         uri: Option<String>,
         iv: Option<String>,
+        keyformat: Option<String>,
+        keyformatversions: Option<String>,
     },
+    /// A URI line associated with a preceding tag or playlist entry.
+    Uri(String),
+    /// An unrecognized tag, preserved without the leading `#`.
+    Unknown(String),
 }
 
 impl std::fmt::Display for Tag {
@@ -176,10 +203,18 @@ impl std::fmt::Display for Tag {
             Tag::ExtXMediaSequence(sequence) => {
                 write!(f, "#EXT-X-MEDIA-SEQUENCE:{}", sequence)
             }
+            Tag::ExtXAllowCache(allow_cache) => {
+                write!(
+                    f,
+                    "#EXT-X-ALLOW-CACHE:{}",
+                    if *allow_cache { "YES" } else { "NO" }
+                )
+            }
             Tag::ExtXDiscontinuitySequence(sequence) => {
                 write!(f, "#EXT-X-DISCONTINUITY-SEQUENCE:{}", sequence)
             }
             Tag::ExtXEndList => write!(f, "#EXT-X-ENDLIST"),
+            Tag::ExtXIFramesOnly => write!(f, "#EXT-X-I-FRAMES-ONLY"),
             Tag::ExtXKey {
                 method,
                 uri,
@@ -230,6 +265,7 @@ impl std::fmt::Display for Tag {
                 instream_id,
                 language_codec,
                 forced,
+                channels,
             } => {
                 // Basic required fields
                 write!(f, "#EXT-X-MEDIA:TYPE={},GROUP-ID=\"{}\"", type_, group_id)?;
@@ -279,10 +315,15 @@ impl std::fmt::Display for Tag {
                     write!(f, ",LANGUAGE-CODEC=\"{}\"", language_codec)?;
                 }
 
+                if let Some(channels) = channels {
+                    write!(f, ",CHANNELS=\"{}\"", channels)?;
+                }
+
                 Ok(())
             }
             Tag::ExtXStreamInf {
                 bandwidth,
+                average_bandwidth,
                 codecs,
                 resolution,
                 frame_rate,
@@ -292,6 +333,9 @@ impl std::fmt::Display for Tag {
                 closed_captions,
             } => {
                 write!(f, "#EXT-X-STREAM-INF:BANDWIDTH={}", bandwidth)?;
+                if let Some(average_bandwidth) = average_bandwidth {
+                    write!(f, ",AVERAGE-BANDWIDTH={}", average_bandwidth)?;
+                }
                 if let Some(codecs) = codecs {
                     write!(f, ",CODECS=\"{}\"", codecs)?;
                 }
@@ -317,12 +361,16 @@ impl std::fmt::Display for Tag {
             }
             Tag::ExtXIFrameStreamInf {
                 bandwidth,
+                average_bandwidth,
                 codecs,
                 resolution,
                 frame_rate,
                 uri,
             } => {
                 write!(f, "#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH={}", bandwidth)?;
+                if let Some(average_bandwidth) = average_bandwidth {
+                    write!(f, ",AVERAGE-BANDWIDTH={}", average_bandwidth)?;
+                }
                 if let Some(codecs) = codecs {
                     write!(f, ",CODECS=\"{}\"", codecs)?;
                 }
@@ -336,6 +384,57 @@ impl std::fmt::Display for Tag {
                 Ok(())
             }
             Tag::ExtXGap => write!(f, "#EXT-X-GAP"),
+            Tag::ExtXDateRange {
+                id,
+                class,
+                start_date,
+                end_date,
+                duration,
+                planned_duration,
+                end_on_next,
+                scte35_cmd,
+                scte35_out,
+                scte35_in,
+                client_attributes,
+            } => {
+                write!(
+                    f,
+                    "#EXT-X-DATERANGE:ID=\"{}\",START-DATE=\"{}\"",
+                    id, start_date
+                )?;
+                if let Some(class) = class {
+                    write!(f, ",CLASS=\"{}\"", class)?;
+                }
+                if let Some(end_date) = end_date {
+                    write!(f, ",END-DATE=\"{}\"", end_date)?;
+                }
+                if let Some(duration) = duration {
+                    write!(f, ",DURATION={}", duration)?;
+                }
+                if let Some(planned_duration) = planned_duration {
+                    write!(f, ",PLANNED-DURATION={}", planned_duration)?;
+                }
+                if let Some(end_on_next) = end_on_next {
+                    write!(
+                        f,
+                        ",END-ON-NEXT={}",
+                        if *end_on_next { "YES" } else { "NO" }
+                    )?;
+                }
+                if let Some(scte35_cmd) = scte35_cmd {
+                    write!(f, ",SCTE35-CMD=\"{}\"", scte35_cmd)?;
+                }
+                if let Some(scte35_out) = scte35_out {
+                    write!(f, ",SCTE35-OUT=\"{}\"", scte35_out)?;
+                }
+                if let Some(scte35_in) = scte35_in {
+                    write!(f, ",SCTE35-IN=\"{}\"", scte35_in)?;
+                }
+                for (name, value) in client_attributes {
+                    write!(f, ",{}=\"{}\"", name, value)?;
+                }
+                Ok(())
+            }
             Tag::ExtXBitrate(bitrate) => {
                 write!(f, "#EXT-X-BITRATE:{}", bitrate)
             }
@@ -431,21 +530,40 @@ impl std::fmt::Display for Tag {
             Tag::ExtXSessionData {
                 id,
                 value,
+                uri,
                 language,
             } => {
-                write!(f, "#EXT-X-SESSION-DATA:ID=\"{}\",VALUE=\"{}\"", id, value)?;
+                write!(f, "#EXT-X-SESSION-DATA:DATA-ID=\"{}\"", id)?;
+                if let Some(value) = value {
+                    write!(f, ",VALUE=\"{}\"", value)?;
+                }
+                if let Some(uri) = uri {
+                    write!(f, ",URI=\"{}\"", uri)?;
+                }
                 if let Some(language) = language {
                     write!(f, ",LANGUAGE=\"{}\"", language)?;
                 }
                 Ok(())
             }
-            Tag::ExtXSessionKey { method, uri, iv } => {
+            Tag::ExtXSessionKey {
+                method,
+                uri,
+                iv,
+                keyformat,
+                keyformatversions,
+            } => {
                 write!(f, "#EXT-X-SESSION-KEY:METHOD={}", method)?;
                 if let Some(uri) = uri {
-                    write!(f, ",URI={}", uri)?;
+                    write!(f, ",URI=\"{}\"", uri)?;
                 }
                 if let Some(iv) = iv {
                     write!(f, ",IV={}", iv)?;
+                }
+                if let Some(keyformat) = keyformat {
+                    write!(f, ",KEYFORMAT=\"{}\"", keyformat)?;
+                }
+                if let Some(keyformatversions) = keyformatversions {
+                    write!(f, ",KEYFORMATVERSIONS=\"{}\"", keyformatversions)?;
                 }
                 Ok(())
             }
@@ -453,6 +571,8 @@ impl std::fmt::Display for Tag {
                 write!(f, "#EXT-X-PLAYLIST-TYPE:{}", playlist_type)?;
                 Ok(())
             }
+            Tag::Uri(uri) => write!(f, "{}", uri),
+            Tag::Unknown(tag) => write!(f, "#{}", tag),
         }
     }
 }

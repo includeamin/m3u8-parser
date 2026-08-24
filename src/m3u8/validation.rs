@@ -7,6 +7,26 @@
 pub enum ValidationError {
     /// Error indicating that the #EXTM3U tag is missing from the playlist.
     MissingExtM3U,
+    /// Error indicating that #EXTM3U is not the first tag in the playlist.
+    ExtM3UNotFirst,
+    /// Error indicating that a tag that may occur only once is duplicated.
+    DuplicateTag(String),
+    /// Error indicating that Master Playlist and Media Playlist tags are mixed.
+    MixedPlaylistTypes,
+    /// Error indicating that a Media Playlist is missing EXT-X-TARGETDURATION.
+    MissingTargetDuration,
+    /// Error indicating that an EXT-X-STREAM-INF tag is not followed by a URI.
+    MissingVariantUri,
+    /// Error indicating that a stream rendition-group reference cannot be resolved.
+    UnresolvedRenditionGroup { attribute: String, group_id: String },
+    /// Error indicating that a tag requires a newer EXT-X-VERSION.
+    InsufficientVersion {
+        tag: String,
+        required: u8,
+        actual: u8,
+    },
+    /// Error indicating that a media segment exceeds EXT-X-TARGETDURATION.
+    SegmentDurationExceedsTarget { duration: f32, target_duration: u64 },
 
     /// Error indicating that the specified version is invalid.
     ///
@@ -35,6 +55,8 @@ pub enum ValidationError {
     ///
     /// * `String` - The invalid key method that was encountered.
     InvalidKeyMethod(String),
+    /// Error indicating that key attributes are inconsistent with the selected method.
+    InvalidKeyAttributes(String),
 
     /// Error indicating that the URI specified in a map tag is invalid.
     InvalidMapUri,
@@ -57,6 +79,8 @@ pub enum ValidationError {
     ///
     /// * `f32` - The invalid planned duration value that was encountered in the date range.
     InvalidDateRangePlannedDuration(f32),
+    /// Error indicating incompatible EXT-X-DATERANGE attributes.
+    InvalidDateRangeAttributes(String),
 
     /// Error indicating that the specified byte range is invalid.
     ///
