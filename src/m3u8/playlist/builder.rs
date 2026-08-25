@@ -160,6 +160,7 @@ impl PlaylistBuilder {
             instream_id: instream_id.map(|s| s.to_string()),
             language_codec: language_codec.map(|s| s.to_string()),
             forced,
+            channels: None,
         });
         self
     }
@@ -179,6 +180,7 @@ impl PlaylistBuilder {
     ) -> Self {
         self.tags.borrow_mut().push(Tag::ExtXStreamInf {
             bandwidth,
+            average_bandwidth: None,
             codecs: codecs.map(|s| s.to_string()),
             resolution: resolution.map(|s| s.to_string()),
             frame_rate,
@@ -201,6 +203,7 @@ impl PlaylistBuilder {
     ) -> Self {
         self.tags.borrow_mut().push(Tag::ExtXIFrameStreamInf {
             bandwidth,
+            average_bandwidth: None,
             codecs: codecs.map(|s| s.to_string()),
             resolution: resolution.map(|s| s.to_string()),
             frame_rate,
@@ -234,7 +237,8 @@ impl PlaylistBuilder {
     pub fn session_data(self, id: &str, value: &str, language: Option<&str>) -> Self {
         self.tags.borrow_mut().push(Tag::ExtXSessionData {
             id: id.to_string(),
-            value: value.to_string(),
+            value: Some(value.to_string()),
+            uri: None,
             language: language.map(|s| s.to_string()),
         });
         self
@@ -246,6 +250,8 @@ impl PlaylistBuilder {
             method: method.to_string(),
             uri: uri.map(|s| s.to_string()),
             iv: iv.map(|s| s.to_string()),
+            keyformat: None,
+            keyformatversions: None,
         });
         self
     }

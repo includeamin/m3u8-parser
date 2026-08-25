@@ -14,7 +14,18 @@ by [RFC 8216](https://tools.ietf.org/html/rfc8216).
 
 - Parse M3U8 playlists from strings, files, or readers
 - Generate M3U8 playlists and write them to strings, files, or writers
-- Support for all tags specified in RFC 8216, including:
+- Derive `MediaSegment` values from a playlist with the effective `KEY`, `MAP`,
+  `BYTERANGE`, `GAP`, and `PROGRAM-DATE-TIME` state for each `EXTINF` segment.
+- Parses, models, and serializes every RFC 8216 tag family listed below. Standard
+    tags use order-independent attribute parsing and unsupported extension tags are
+    preserved for round-tripping.
+- RFC 8216 semantic validation enforces `EXTM3U` placement, singleton tags,
+    Master/Media Playlist separation, `EXT-X-STREAM-INF` URI pairing, required
+  media target durations, RFC target-duration rounding, tag version gates,
+  encryption key attribute combinations, `END-ON-NEXT` date-range constraints,
+  and Master Playlist rendition-group references. Validation still does not
+  enforce every cross-tag constraint defined by the RFC.
+- RFC 8216 tag coverage:
     - **Basic Tags**:
         - `#EXTM3U`
         - `#EXT-X-VERSION`
@@ -23,14 +34,9 @@ by [RFC 8216](https://tools.ietf.org/html/rfc8216).
         - `#EXT-X-MEDIA-SEQUENCE`
         - `#EXT-X-ALLOW-CACHE`
         - `#EXT-X-DISCONTINUITY-SEQUENCE`
-        - `#EXT-X-MEDIA`
-        - `#EXT-X-STREAM-INF`
-        - `#EXT-X-I-FRAME-STREAM-INF`
-        - `#EXT-X-INDEPENDENT-SEGMENTS`
-        - `#EXT-X-BYTERANGE`
-        - `#EXT-X-SESSION-DATA`
-        - `#EXT-X-SESSION-KEY`
-        - `#EXT-X-DEFINE`
+        - `#EXT-X-ENDLIST`
+        - `#EXT-X-PLAYLIST-TYPE`
+        - `#EXT-X-I-FRAMES-ONLY`
     - **Media Segment Tags**:
         - `#EXTINF`
         - `#EXT-X-KEY`
@@ -38,24 +44,20 @@ by [RFC 8216](https://tools.ietf.org/html/rfc8216).
         - `#EXT-X-MAP`
         - `#EXT-X-GAP`
         - `#EXT-X-PROGRAM-DATE-TIME`
-        - `#EXT-X-PART`
-        - `#EXT-X-PRELOAD-HINT`
-        - `#EXT-X-START`
         - `#EXT-X-DATERANGE`
-    - **Encryption Tags**:
-        - `#EXT-X-KEY`
-        - `#EXT-X-SESSION-KEY`
-    - **Date Range Tags**:
-        - `#EXT-X-DATERANGE`
-    - **End Playlist Tags**:
-        - `#EXT-X-ENDLIST`
     - **Master Playlist Tags**:
         - `#EXT-X-STREAM-INF`
         - `#EXT-X-MEDIA`
-        - `#EXT-X-STREAM-INF`
         - `#EXT-X-I-FRAME-STREAM-INF`
-    - **Program Date and Time**:
-        - `#EXT-X-PROGRAM-DATE-TIME`
+        - `#EXT-X-SESSION-DATA`
+        - `#EXT-X-SESSION-KEY`
+        - `#EXT-X-INDEPENDENT-SEGMENTS`
+        - `#EXT-X-START`
+        - `#EXT-X-DEFINE`
+- Additional non-RFC low-latency and draft extension tags represented by this crate include
+    `#EXT-X-PART`, `#EXT-X-PART-INF`, `#EXT-X-PRELOAD-HINT`,
+  `#EXT-X-RENDITION-REPORT`, `#EXT-X-SERVER-CONTROL`, `#EXT-X-SKIP`, and
+  `#EXT-X-BITRATE`.
 
 ## Installation
 
@@ -103,12 +105,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           .extm3u()
           .version(7)
           .target_duration(6)
-          .extinf(5.009, None)
-          .uri("https://media.example.com/first.ts".to_string())
-          .extinf(5.009, None)
-          .uri("https://media.example.com/second.ts".to_string())
-          .extinf(3.003, None)
-          .uri("https://media.example.com/third.ts".to_string())
+      .extinf("https://media.example.com/first.ts", 5.009, None)
+      .extinf("https://media.example.com/second.ts", 5.009, None)
+      .extinf("https://media.example.com/third.ts", 3.003, None)
           .end_list()
           .build()?;
 
