@@ -2071,4 +2071,97 @@ media.mp4
             ])
         );
     }
+
+    #[test]
+    fn test_builder_creates_master_playlist_with_variant_uris() {
+        let playlist = PlaylistBuilder::new()
+            .extm3u()
+            .version(6)
+            .stream_inf(
+                2_000_000,
+                Some(1_800_000),
+                Some("avc1.640020,mp4a.40.2"),
+                Some("1280x720"),
+                Some(30.0),
+                None,
+                None,
+                None,
+                Some("NONE"),
+            )
+            .uri("720p.m3u8")
+            .iframe_stream_inf(
+                200_000,
+                Some(180_000),
+                None,
+                None,
+                None,
+                "720p-iframes.m3u8",
+            )
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            playlist.to_string(),
+            "#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-STREAM-INF:BANDWIDTH=2000000,AVERAGE-BANDWIDTH=1800000,CODECS=\"avc1.640020,mp4a.40.2\",RESOLUTION=1280x720,FRAME-RATE=30,CLOSED-CAPTIONS=NONE
+720p.m3u8
+#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=200000,AVERAGE-BANDWIDTH=180000,URI=\"720p-iframes.m3u8\"
+"
+        );
+    }
+
+    #[test]
+    fn test_builder_supports_date_range_low_latency_and_arbitrary_tags() {
+        let playlist = PlaylistBuilder::new()
+            .extm3u()
+            .version(9)
+            .target_duration(4)
+            .server_control(Some(24.0), Some(1.5), true)
+            .part_inf(1.0)
+            .skip(3)
+            .date_range("ad-1", "2024-01-01T00:00:00Z")
+            .part("seg1.0.mp4", 1.0)
+            .extinf("seg1.mp4", 4.0, None)
+            .discontinuity()
+            .tag(Tag::ExtXGap)
+            .extinf("seg2.mp4", 4.0, None)
+            .preload_hint("PART", "seg3.0.mp4")
+            .rendition_report("../low/index.m3u8", Some(2), Some(0))
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            playlist.to_string(),
+            "#EXTM3U
+#EXT-X-VERSION:9
+#EXT-X-TARGETDURATION:4
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24,PART-HOLD-BACK=1.5,CAN-BLOCK-RELOAD=YES
+#EXT-X-PART-INF:PART-TARGET=1
+#EXT-X-SKIP:SKIPPED-SEGMENTS=3
+#EXT-X-DATERANGE:ID=\"ad-1\",START-DATE=\"2024-01-01T00:00:00Z\"
+#EXT-X-PART:DURATION=1,URI=\"seg1.0.mp4\"
+#EXTINF:4,
+seg1.mp4
+#EXT-X-DISCONTINUITY
+#EXT-X-GAP
+#EXTINF:4,
+seg2.mp4
+#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"seg3.0.mp4\"
+#EXT-X-RENDITION-REPORT:URI=\"../low/index.m3u8\",LAST-MSN=2,LAST-PART=0
+"
+        );
+    }
+
+    #[test]
+    fn test_builder_clones_are_independent() {
+        let base = PlaylistBuilder::new().extm3u();
+        let with_version = base.clone().version(3);
+
+        assert_eq!(base.build().unwrap().tags, vec![Tag::ExtM3U]);
+        assert_eq!(
+            with_version.build().unwrap().tags,
+            vec![Tag::ExtM3U, Tag::ExtXVersion(3)]
+        );
+    }
 }
