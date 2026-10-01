@@ -3,6 +3,7 @@
 /// Each variant corresponds to a specific type of tag defined in the M3U8 specification.
 /// This enum allows for easy manipulation and representation of these tags in a playlist.
 #[derive(Debug, PartialEq, Clone)]
+#[non_exhaustive]
 pub enum Tag {
     /// Indicates the start of an M3U8 file.
     ExtM3U,
@@ -27,18 +28,9 @@ pub enum Tag {
     /// Indicates that each media segment is an I-frame.
     ExtXIFramesOnly,
     /// Contains information about encryption keys.
-    ExtXKey {
-        method: String,
-        uri: Option<String>,
-        iv: Option<String>,
-        keyformat: Option<String>,
-        keyformatversions: Option<String>,
-    },
+    ExtXKey(Key),
     /// Represents a mapping to an initialization segment.
-    ExtXMap {
-        uri: String,
-        byterange: Option<String>,
-    },
+    ExtXMap(Map),
     /// Specifies the program date and time.
     ExtXProgramDateTime(String),
     /// Represents a byte range.
@@ -52,7 +44,7 @@ pub enum Tag {
         name: Option<String>,
         uri: Option<String>,
         default: Option<bool>,
-        autoplay: Option<bool>,
+        autoselect: Option<bool>,
         characteristics: Option<String>,
         language: Option<String>,
         instream_id: Option<String>,
@@ -88,6 +80,7 @@ pub enum Tag {
         id: String,
         class: Option<String>,
         start_date: String,
+        cue: Option<String>,
         end_date: Option<String>,
         duration: Option<f64>,
         planned_duration: Option<f64>,
@@ -95,7 +88,8 @@ pub enum Tag {
         scte35_cmd: Option<String>,
         scte35_out: Option<String>,
         scte35_in: Option<String>,
-        client_attributes: Vec<(String, String)>,
+        /// `X-` client attributes and unrecognized attributes, in input order.
+        extra_attributes: Vec<(String, AttributeValue)>,
     },
     /// Specifies the bitrate of the stream.
     ExtXBitrate(u32),
@@ -108,37 +102,41 @@ pub enum Tag {
     },
     /// Provides server control information.
     ExtXServerControl {
-        can_play: Option<bool>,
-        can_seek: Option<bool>,
-        can_pause: Option<bool>,
-        min_buffer_time: Option<f32>,
+        can_skip_until: Option<f64>,
+        can_skip_dateranges: Option<bool>,
+        hold_back: Option<f64>,
+        part_hold_back: Option<f64>,
+        can_block_reload: Option<bool>,
     },
     /// Represents part information.
-    ExtXPartInf {
-        part_target_duration: f32,
-        part_hold_back: Option<f32>,
-        part_number: Option<u64>,
-    },
+    ExtXPartInf { part_target_duration: f32 },
     /// Represents a preload hint.
     ExtXPreloadHint {
+        /// The hinted resource type, `PART` or `MAP`.
+        type_: String,
         uri: String,
-        /// Optional byte range for the preload hint.
-        byterange: Option<String>,
+        byterange_start: Option<u64>,
+        byterange_length: Option<u64>,
     },
     /// Represents a rendition report.
-    ExtXRenditionReport { uri: String, bandwidth: u32 },
+    ExtXRenditionReport {
+        uri: String,
+        last_msn: Option<u64>,
+        last_part: Option<u64>,
+    },
     /// Represents a part of a media segment.
     ExtXPart {
         uri: String,
-        duration: Option<f32>,
-        // additional fields if necessary
+        duration: f32,
+        independent: Option<bool>,
+        byterange: Option<String>,
+        gap: Option<bool>,
     },
     /// Indicates a skip in the playlist.
     ExtXSkip {
-        uri: String,
-        duration: Option<f32>,
         skipped_segments: u32,
-        reason: Option<String>,
+        /// Tab-delimited list of removed EXT-X-DATERANGE IDs.
+        recently_removed_dateranges: Option<String>,
     },
     /// Indicates a discontinuity in the media stream.
     ExtXDiscontinuity,
@@ -149,17 +147,77 @@ pub enum Tag {
         uri: Option<String>,
         language: Option<String>,
     },
-    ExtXSessionKey {
-        method: String,
-        uri: Option<String>,
-        iv: Option<String>,
-        keyformat: Option<String>,
-        keyformatversions: Option<String>,
-    },
+    /// Encryption key information for a Master Playlist.
+    ExtXSessionKey(Key),
     /// A URI line associated with a preceding tag or playlist entry.
     Uri(String),
     /// An unrecognized tag, preserved without the leading `#`.
     Unknown(String),
+}
+
+/// Encryption key attributes shared by EXT-X-KEY and EXT-X-SESSION-KEY.
+#[derive(Debug, PartialEq, Clone)]
+pub struct Key {
+    /// `NONE`, `AES-128`, or `SAMPLE-AES`.
+    pub method: String,
+    pub uri: Option<String>,
+    pub iv: Option<String>,
+    pub keyformat: Option<String>,
+    pub keyformatversions: Option<String>,
+}
+
+impl std::fmt::Display for Key {
+    /// Formats the attribute list, without the tag name.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "METHOD={}", self.method)?;
+        if let Some(uri) = &self.uri {
+            write!(f, ",URI=\"{}\"", uri)?;
+        }
+        if let Some(iv) = &self.iv {
+            write!(f, ",IV={}", iv)?;
+        }
+        if let Some(keyformat) = &self.keyformat {
+            write!(f, ",KEYFORMAT=\"{}\"", keyformat)?;
+        }
+        if let Some(keyformatversions) = &self.keyformatversions {
+            write!(f, ",KEYFORMATVERSIONS=\"{}\"", keyformatversions)?;
+        }
+        Ok(())
+    }
+}
+
+/// The Media Initialization Section declared by EXT-X-MAP.
+#[derive(Debug, PartialEq, Clone)]
+pub struct Map {
+    pub uri: String,
+    /// Byte range in `<n>[@<o>]` form.
+    pub byterange: Option<String>,
+}
+
+/// An attribute value whose type is not modeled, preserving whether it was quoted.
+#[derive(Debug, PartialEq, Clone)]
+pub enum AttributeValue {
+    /// A quoted-string value, stored without the surrounding quotes.
+    Quoted(String),
+    /// An unquoted value such as a decimal-integer, hexadecimal-sequence, or enumerated-string.
+    Unquoted(String),
+}
+
+impl std::fmt::Display for AttributeValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AttributeValue::Quoted(value) => write!(f, "\"{}\"", value),
+            AttributeValue::Unquoted(value) => write!(f, "{}", value),
+        }
+    }
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value {
+        "YES"
+    } else {
+        "NO"
+    }
 }
 
 impl std::fmt::Display for Tag {
@@ -189,13 +247,9 @@ impl std::fmt::Display for Tag {
             Tag::ExtM3U => write!(f, "#EXTM3U"),
             Tag::ExtXVersion(version) => write!(f, "#EXT-X-VERSION:{}", version),
             Tag::ExtInf(url, duration, title) => {
-                if let Some(title) = title {
-                    // Format with 3 decimal places
-                    write!(f, "#EXTINF:{:.4},{}\n {}", duration, title, url)
-                } else {
-                    // Format with 3 decimal places
-                    write!(f, "#EXTINF:{:.4},\n{}", duration, url)
-                }
+                // Shortest exact form: whole durations stay integers for version < 3.
+                let title = title.as_deref().unwrap_or_default();
+                write!(f, "#EXTINF:{},{}\n{}", duration, title, url)
             }
             Tag::ExtXTargetDuration(duration) => {
                 write!(f, "#EXT-X-TARGETDURATION:{}", duration)
@@ -204,43 +258,18 @@ impl std::fmt::Display for Tag {
                 write!(f, "#EXT-X-MEDIA-SEQUENCE:{}", sequence)
             }
             Tag::ExtXAllowCache(allow_cache) => {
-                write!(
-                    f,
-                    "#EXT-X-ALLOW-CACHE:{}",
-                    if *allow_cache { "YES" } else { "NO" }
-                )
+                write!(f, "#EXT-X-ALLOW-CACHE:{}", yes_no(*allow_cache))
             }
             Tag::ExtXDiscontinuitySequence(sequence) => {
                 write!(f, "#EXT-X-DISCONTINUITY-SEQUENCE:{}", sequence)
             }
             Tag::ExtXEndList => write!(f, "#EXT-X-ENDLIST"),
             Tag::ExtXIFramesOnly => write!(f, "#EXT-X-I-FRAMES-ONLY"),
-            Tag::ExtXKey {
-                method,
-                uri,
-                iv,
-                keyformat,
-                keyformatversions,
-            } => {
-                write!(f, "#EXT-X-KEY:METHOD={}", method)?;
-                if let Some(uri) = uri {
-                    write!(f, ",URI=\"{}\"", uri)?;
-                }
-                if let Some(iv) = iv {
-                    write!(f, ",IV={}", iv)?;
-                }
-                if let Some(keyformat) = keyformat {
-                    write!(f, ",KEYFORMAT={}", keyformat)?;
-                }
-                if let Some(keyformatversions) = keyformatversions {
-                    write!(f, ",KEYFORMATVERSIONS={}", keyformatversions)?;
-                }
-                Ok(())
-            }
-            Tag::ExtXMap { uri, byterange } => {
+            Tag::ExtXKey(key) => write!(f, "#EXT-X-KEY:{}", key),
+            Tag::ExtXMap(Map { uri, byterange }) => {
                 write!(f, "#EXT-X-MAP:URI=\"{}\"", uri)?;
                 if let Some(byterange) = byterange {
-                    write!(f, ",BYTERANGE={}", byterange)?;
+                    write!(f, ",BYTERANGE=\"{}\"", byterange)?;
                 }
                 Ok(())
             }
@@ -259,7 +288,7 @@ impl std::fmt::Display for Tag {
                 name,
                 uri,
                 default,
-                autoplay,
+                autoselect,
                 characteristics,
                 language,
                 instream_id,
@@ -282,17 +311,17 @@ impl std::fmt::Display for Tag {
 
                 // Optional default field
                 if let Some(default) = default {
-                    write!(f, ",DEFAULT={}", if *default { "YES" } else { "NO" })?;
+                    write!(f, ",DEFAULT={}", yes_no(*default))?;
                 }
 
-                // Optional autoplay field
-                if let Some(autoplay) = autoplay {
-                    write!(f, ",AUTOPLAY={}", if *autoplay { "YES" } else { "NO" })?;
+                // Optional autoselect field
+                if let Some(autoselect) = autoselect {
+                    write!(f, ",AUTOSELECT={}", yes_no(*autoselect))?;
                 }
 
                 // Optional forced field
                 if let Some(forced) = forced {
-                    write!(f, ",FORCED={}", if *forced { "YES" } else { "NO" })?;
+                    write!(f, ",FORCED={}", yes_no(*forced))?;
                 }
 
                 // Optional instream_id field
@@ -302,7 +331,7 @@ impl std::fmt::Display for Tag {
 
                 // Optional characteristics field
                 if let Some(characteristics) = characteristics {
-                    write!(f, ",CHARACTERISTICS={}", characteristics)?;
+                    write!(f, ",CHARACTERISTICS=\"{}\"", characteristics)?;
                 }
 
                 // Optional language field
@@ -354,8 +383,11 @@ impl std::fmt::Display for Tag {
                 if let Some(subtitle) = subtitle {
                     write!(f, ",SUBTITLES=\"{}\"", subtitle)?;
                 }
-                if let Some(closed_captions) = closed_captions {
-                    write!(f, ",CLOSED-CAPTIONS=\"{}\"", closed_captions)?;
+                // NONE is an enumerated-string; group IDs are quoted-strings.
+                match closed_captions.as_deref() {
+                    Some("NONE") => write!(f, ",CLOSED-CAPTIONS=NONE")?,
+                    Some(closed_captions) => write!(f, ",CLOSED-CAPTIONS=\"{}\"", closed_captions)?,
+                    None => {}
                 }
                 Ok(())
             }
@@ -388,6 +420,7 @@ impl std::fmt::Display for Tag {
                 id,
                 class,
                 start_date,
+                cue,
                 end_date,
                 duration,
                 planned_duration,
@@ -395,13 +428,16 @@ impl std::fmt::Display for Tag {
                 scte35_cmd,
                 scte35_out,
                 scte35_in,
-                client_attributes,
+                extra_attributes,
             } => {
                 write!(
                     f,
                     "#EXT-X-DATERANGE:ID=\"{}\",START-DATE=\"{}\"",
                     id, start_date
                 )?;
+                if let Some(cue) = cue {
+                    write!(f, ",CUE=\"{}\"", cue)?;
+                }
                 if let Some(class) = class {
                     write!(f, ",CLASS=\"{}\"", class)?;
                 }
@@ -415,23 +451,19 @@ impl std::fmt::Display for Tag {
                     write!(f, ",PLANNED-DURATION={}", planned_duration)?;
                 }
                 if let Some(end_on_next) = end_on_next {
-                    write!(
-                        f,
-                        ",END-ON-NEXT={}",
-                        if *end_on_next { "YES" } else { "NO" }
-                    )?;
+                    write!(f, ",END-ON-NEXT={}", yes_no(*end_on_next))?;
                 }
                 if let Some(scte35_cmd) = scte35_cmd {
-                    write!(f, ",SCTE35-CMD=\"{}\"", scte35_cmd)?;
+                    write!(f, ",SCTE35-CMD={}", scte35_cmd)?;
                 }
                 if let Some(scte35_out) = scte35_out {
-                    write!(f, ",SCTE35-OUT=\"{}\"", scte35_out)?;
+                    write!(f, ",SCTE35-OUT={}", scte35_out)?;
                 }
                 if let Some(scte35_in) = scte35_in {
-                    write!(f, ",SCTE35-IN=\"{}\"", scte35_in)?;
+                    write!(f, ",SCTE35-IN={}", scte35_in)?;
                 }
-                for (name, value) in client_attributes {
-                    write!(f, ",{}=\"{}\"", name, value)?;
+                for (name, value) in extra_attributes {
+                    write!(f, ",{}={}", name, value)?;
                 }
                 Ok(())
             }
@@ -445,86 +477,104 @@ impl std::fmt::Display for Tag {
             } => {
                 write!(f, "#EXT-X-START:TIME-OFFSET={}", time_offset)?;
                 if let Some(precise) = precise {
-                    write!(f, ",PRECISE={}", if *precise { "YES" } else { "NO" })?;
+                    write!(f, ",PRECISE={}", yes_no(*precise))?;
                 }
                 Ok(())
             }
             Tag::ExtXServerControl {
-                can_play,
-                can_seek,
-                can_pause,
-                min_buffer_time,
+                can_skip_until,
+                can_skip_dateranges,
+                hold_back,
+                part_hold_back,
+                can_block_reload,
             } => {
-                write!(f, "#EXT-X-SERVER-CONTROL")?;
-                if let Some(can_play) = can_play {
-                    write!(f, ",CAN-PLAY={}", if *can_play { "YES" } else { "NO" })?;
+                let mut attributes = Vec::new();
+                if let Some(can_skip_until) = can_skip_until {
+                    attributes.push(format!("CAN-SKIP-UNTIL={}", can_skip_until));
                 }
-                if let Some(can_seek) = can_seek {
-                    write!(f, ",CAN-SEEK={}", if *can_seek { "YES" } else { "NO" })?;
+                if let Some(can_skip_dateranges) = can_skip_dateranges {
+                    attributes.push(format!(
+                        "CAN-SKIP-DATERANGES={}",
+                        yes_no(*can_skip_dateranges)
+                    ));
                 }
-                if let Some(can_pause) = can_pause {
-                    write!(f, ",CAN-PAUSE={}", if *can_pause { "YES" } else { "NO" })?;
+                if let Some(hold_back) = hold_back {
+                    attributes.push(format!("HOLD-BACK={}", hold_back));
                 }
-                if let Some(min_buffer_time) = min_buffer_time {
-                    write!(f, ",MIN-BUFFER-TIME={}", min_buffer_time)?;
+                if let Some(part_hold_back) = part_hold_back {
+                    attributes.push(format!("PART-HOLD-BACK={}", part_hold_back));
                 }
-                Ok(())
+                if let Some(can_block_reload) = can_block_reload {
+                    attributes.push(format!("CAN-BLOCK-RELOAD={}", yes_no(*can_block_reload)));
+                }
+                write!(f, "#EXT-X-SERVER-CONTROL:{}", attributes.join(","))
             }
             Tag::ExtXPartInf {
                 part_target_duration,
-                part_hold_back,
-                part_number,
             } => {
-                write!(f, "#EXT-X-PART-INF:PART-TARGET={}", part_target_duration)?;
-                if let Some(part_hold_back) = part_hold_back {
-                    write!(f, ",PART-HOLD-BACK={}", part_hold_back)?;
+                write!(f, "#EXT-X-PART-INF:PART-TARGET={}", part_target_duration)
+            }
+            Tag::ExtXPreloadHint {
+                type_,
+                uri,
+                byterange_start,
+                byterange_length,
+            } => {
+                write!(f, "#EXT-X-PRELOAD-HINT:TYPE={},URI=\"{}\"", type_, uri)?;
+                if let Some(byterange_start) = byterange_start {
+                    write!(f, ",BYTERANGE-START={}", byterange_start)?;
                 }
-                if let Some(part_number) = part_number {
-                    write!(f, ",PART-NUMBER={}", part_number)?;
+                if let Some(byterange_length) = byterange_length {
+                    write!(f, ",BYTERANGE-LENGTH={}", byterange_length)?;
                 }
                 Ok(())
             }
-            Tag::ExtXPreloadHint { uri, byterange } => {
-                let mut result = format!("#EXT-X-PRELOAD-HINT:URI=\"{}\"", uri);
-                if let Some(byterange) = byterange {
-                    result.push_str(&format!(",BYTERANGE={}", byterange));
+            Tag::ExtXRenditionReport {
+                uri,
+                last_msn,
+                last_part,
+            } => {
+                write!(f, "#EXT-X-RENDITION-REPORT:URI=\"{}\"", uri)?;
+                if let Some(last_msn) = last_msn {
+                    write!(f, ",LAST-MSN={}", last_msn)?;
                 }
-                write!(f, "{}", result)
+                if let Some(last_part) = last_part {
+                    write!(f, ",LAST-PART={}", last_part)?;
+                }
+                Ok(())
             }
-            Tag::ExtXRenditionReport { uri, bandwidth } => {
-                write!(
-                    f,
-                    "#EXT-X-RENDITION-REPORT:URI=\"{}\",BANDWIDTH={}",
-                    uri, bandwidth
-                )
-            }
-            Tag::ExtXPart { uri, duration } => {
-                write!(f, "#EXT-X-PART:URI=\"{}\"", uri)?;
-                if let Some(duration) = duration {
-                    write!(f, ",DURATION={}", duration)?;
+            Tag::ExtXPart {
+                uri,
+                duration,
+                independent,
+                byterange,
+                gap,
+            } => {
+                write!(f, "#EXT-X-PART:DURATION={},URI=\"{}\"", duration, uri)?;
+                if let Some(independent) = independent {
+                    write!(f, ",INDEPENDENT={}", yes_no(*independent))?;
+                }
+                if let Some(byterange) = byterange {
+                    write!(f, ",BYTERANGE=\"{}\"", byterange)?;
+                }
+                if let Some(gap) = gap {
+                    write!(f, ",GAP={}", yes_no(*gap))?;
                 }
                 Ok(())
             }
             Tag::ExtXSkip {
-                uri,
-                duration,
                 skipped_segments,
-                reason,
+                recently_removed_dateranges,
             } => {
-                let mut output = format!(
-                    "#EXT-X-SKIP:URI=\"{}\",SKIPPED-SEGMENTS={}",
-                    uri, skipped_segments
-                );
-
-                if let Some(duration) = duration {
-                    output.push_str(&format!(",DURATION={}", duration));
+                write!(f, "#EXT-X-SKIP:SKIPPED-SEGMENTS={}", skipped_segments)?;
+                if let Some(recently_removed_dateranges) = recently_removed_dateranges {
+                    write!(
+                        f,
+                        ",RECENTLY-REMOVED-DATERANGES=\"{}\"",
+                        recently_removed_dateranges
+                    )?;
                 }
-
-                if let Some(reason) = reason {
-                    output.push_str(&format!(",REASON=\"{}\"", reason));
-                }
-
-                write!(f, "{}", output)
+                Ok(())
             }
             Tag::ExtXDiscontinuity => write!(f, "#EXT-X-DISCONTINUITY"),
             Tag::ExtXSessionData {
@@ -545,28 +595,7 @@ impl std::fmt::Display for Tag {
                 }
                 Ok(())
             }
-            Tag::ExtXSessionKey {
-                method,
-                uri,
-                iv,
-                keyformat,
-                keyformatversions,
-            } => {
-                write!(f, "#EXT-X-SESSION-KEY:METHOD={}", method)?;
-                if let Some(uri) = uri {
-                    write!(f, ",URI=\"{}\"", uri)?;
-                }
-                if let Some(iv) = iv {
-                    write!(f, ",IV={}", iv)?;
-                }
-                if let Some(keyformat) = keyformat {
-                    write!(f, ",KEYFORMAT=\"{}\"", keyformat)?;
-                }
-                if let Some(keyformatversions) = keyformatversions {
-                    write!(f, ",KEYFORMATVERSIONS=\"{}\"", keyformatversions)?;
-                }
-                Ok(())
-            }
+            Tag::ExtXSessionKey(key) => write!(f, "#EXT-X-SESSION-KEY:{}", key),
             Tag::ExtXPlaylistType(playlist_type) => {
                 write!(f, "#EXT-X-PLAYLIST-TYPE:{}", playlist_type)?;
                 Ok(())

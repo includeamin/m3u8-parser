@@ -1,5 +1,5 @@
 use crate::m3u8::playlist::Playlist;
-use crate::m3u8::tags::Tag;
+use crate::m3u8::tags::{Key, Map, Tag};
 use crate::m3u8::validation::ValidationError;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -83,22 +83,22 @@ impl PlaylistBuilder {
         keyformat: Option<&str>,
         keyformatversions: Option<&str>,
     ) -> Self {
-        self.tags.borrow_mut().push(Tag::ExtXKey {
+        self.tags.borrow_mut().push(Tag::ExtXKey(Key {
             method: method.to_string(),
             uri: uri.map(|s| s.to_string()),
             iv: iv.map(|s| s.to_string()),
             keyformat: keyformat.map(|s| s.to_string()),
             keyformatversions: keyformatversions.map(|s| s.to_string()),
-        });
+        }));
         self
     }
 
     /// Adds an `ExtXMap` tag.
     pub fn map(self, uri: &str, byterange: Option<&str>) -> Self {
-        self.tags.borrow_mut().push(Tag::ExtXMap {
+        self.tags.borrow_mut().push(Tag::ExtXMap(Map {
             uri: uri.to_string(),
             byterange: byterange.map(|s| s.to_string()),
-        });
+        }));
         self
     }
 
@@ -141,7 +141,7 @@ impl PlaylistBuilder {
         name: Option<&str>,
         uri: Option<&str>,
         default: Option<bool>,
-        autoplay: Option<bool>,
+        autoselect: Option<bool>,
         characteristics: Option<&str>,
         language: Option<&str>,
         forced: Option<bool>,
@@ -154,7 +154,7 @@ impl PlaylistBuilder {
             name: name.map(|s| s.to_string()),
             uri: uri.map(|s| s.to_string()),
             default,
-            autoplay,
+            autoselect,
             characteristics: characteristics.map(|s| s.to_string()),
             language: language.map(|s| s.to_string()),
             instream_id: instream_id.map(|s| s.to_string()),
@@ -246,13 +246,13 @@ impl PlaylistBuilder {
 
     /// Adds an `ExtXSessionKey` tag.
     pub fn session_key(self, method: &str, uri: Option<&str>, iv: Option<&str>) -> Self {
-        self.tags.borrow_mut().push(Tag::ExtXSessionKey {
+        self.tags.borrow_mut().push(Tag::ExtXSessionKey(Key {
             method: method.to_string(),
             uri: uri.map(|s| s.to_string()),
             iv: iv.map(|s| s.to_string()),
             keyformat: None,
             keyformatversions: None,
-        });
+        }));
         self
     }
 
