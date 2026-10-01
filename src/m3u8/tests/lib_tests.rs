@@ -3,7 +3,7 @@ mod tests {
     use crate::m3u8::error::{ParseError, SyntaxError};
     use crate::m3u8::playlist::builder::PlaylistBuilder;
     use crate::m3u8::playlist::Playlist;
-    use crate::m3u8::tags::{AttributeValue, Key, Map, Tag};
+    use crate::m3u8::tags::{AttributeValue, ByteRange, Key, Map, Tag};
     use crate::m3u8::validation::ValidationError;
     use std::io::Write;
 
@@ -112,7 +112,10 @@ variant.m3u8
                 }),
                 Tag::ExtXMap(Map {
                     uri: "init.mp4".to_string(),
-                    byterange: Some("720@0".to_string()),
+                    byterange: Some(ByteRange {
+                        length: 720,
+                        offset: Some(0)
+                    }),
                 }),
             ]
         );
@@ -270,7 +273,10 @@ segment.ts
                     uri: "part0.ts".to_string(),
                     duration: 0.5,
                     independent: Some(true),
-                    byterange: Some("100@0".to_string()),
+                    byterange: Some(ByteRange {
+                        length: 100,
+                        offset: Some(0)
+                    }),
                     gap: Some(true),
                 },
                 Tag::ExtXPreloadHint {
@@ -313,7 +319,10 @@ seg2.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(4),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtXByteRange("75232@0".to_string()),
+                Tag::ExtXByteRange(ByteRange {
+                    length: 75232,
+                    offset: Some(0)
+                }),
                 Tag::Unknown(" a comment".to_string()),
                 Tag::ExtInf {
                     uri: "seg.ts".to_string(),
@@ -331,7 +340,13 @@ seg2.ts
         assert_eq!(playlist.validate(), Ok(()));
 
         let segments = playlist.media_segments();
-        assert_eq!(segments[0].byterange.as_deref(), Some("75232@0"));
+        assert_eq!(
+            segments[0].byterange,
+            Some(ByteRange {
+                length: 75232,
+                offset: Some(0)
+            })
+        );
         assert_eq!(segments[1].byterange, None);
     }
 
@@ -427,7 +442,13 @@ second.ts
 
         assert_eq!(segments.len(), 2);
         assert_eq!(segments[0].uri, "first.ts");
-        assert_eq!(segments[0].byterange.as_deref(), Some("1000@0"));
+        assert_eq!(
+            segments[0].byterange,
+            Some(ByteRange {
+                length: 1000,
+                offset: Some(0)
+            })
+        );
         assert_eq!(
             segments[0].program_date_time.as_deref(),
             Some("2024-01-01T00:00:00Z")
@@ -1150,7 +1171,10 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(3),
                 Tag::ExtXTargetDuration(6),
-                Tag::ExtXByteRange("1000@0".to_string()),
+                Tag::ExtXByteRange(ByteRange {
+                    length: 1000,
+                    offset: Some(0),
+                }),
             ],
         };
 
@@ -1704,7 +1728,7 @@ third.ts
                 Tag::ExtM3U,
                 Tag::ExtXIndependentSegments,
                 Tag::ExtXStart {
-                    time_offset: "0".to_string(),
+                    time_offset: 0.0,
                     precise: None,
                 },
                 media_tag("AUDIO", None),
@@ -1875,5 +1899,176 @@ third.ts
         let mut buffer = Vec::new();
         playlist.write_to(&mut buffer).unwrap();
         assert_eq!(String::from_utf8(buffer).unwrap(), data);
+    }
+
+    #[test]
+    fn test_parse_typed_byte_ranges_and_time_offset() {
+        let data = "#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-TARGETDURATION:10
+#EXT-X-START:TIME-OFFSET=-12.5,PRECISE=YES
+#EXT-X-MAP:URI=\"init.mp4\",BYTERANGE=\"720@0\"
+#EXT-X-BYTERANGE:1000@720
+#EXTINF:10,
+media.mp4
+#EXT-X-BYTERANGE:2000
+#EXTINF:10,
+media.mp4
+";
+        let playlist = Playlist::from_reader(data.as_bytes()).unwrap();
+
+        assert_eq!(
+            playlist.tags[3],
+            Tag::ExtXStart {
+                time_offset: -12.5,
+                precise: Some(true)
+            }
+        );
+        assert_eq!(
+            playlist.tags[4],
+            Tag::ExtXMap(Map {
+                uri: "init.mp4".to_string(),
+                byterange: Some(ByteRange {
+                    length: 720,
+                    offset: Some(0)
+                }),
+            })
+        );
+        let segments = playlist.media_segments();
+        assert_eq!(
+            segments[0].byterange,
+            Some(ByteRange {
+                length: 1000,
+                offset: Some(720)
+            })
+        );
+        assert_eq!(
+            segments[1].byterange,
+            Some(ByteRange {
+                length: 2000,
+                offset: None
+            })
+        );
+        assert_eq!(playlist.validate(), Ok(()));
+        assert_eq!(playlist.to_string(), data);
+    }
+
+    #[test]
+    fn test_parse_rejects_malformed_byte_ranges_and_time_offsets() {
+        assert_eq!(
+            syntax_error("#EXTM3U\n#EXT-X-BYTERANGE:1000@\n"),
+            (
+                2,
+                SyntaxError::InvalidTagValue {
+                    tag: "EXT-X-BYTERANGE",
+                    value: "1000@".to_string()
+                }
+            )
+        );
+        assert_eq!(
+            syntax_error("#EXTM3U\n#EXT-X-MAP:URI=\"a\",BYTERANGE=\"x\"\n"),
+            (
+                2,
+                SyntaxError::InvalidAttributeValue {
+                    tag: "EXT-X-MAP",
+                    attribute: "BYTERANGE",
+                    value: "x".to_string()
+                }
+            )
+        );
+        assert_eq!(
+            syntax_error("#EXTM3U\n#EXT-X-START:TIME-OFFSET=soon\n"),
+            (
+                2,
+                SyntaxError::InvalidAttributeValue {
+                    tag: "EXT-X-START",
+                    attribute: "TIME-OFFSET",
+                    value: "soon".to_string()
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn test_validate_byte_range_without_offset_needs_previous_sub_range() {
+        let segment = |uri: &str| Tag::ExtInf {
+            uri: uri.to_string(),
+            duration: 10.0,
+            title: None,
+        };
+        let range = |offset| {
+            Tag::ExtXByteRange(ByteRange {
+                length: 100,
+                offset,
+            })
+        };
+        let playlist = Playlist {
+            tags: vec![
+                Tag::ExtM3U,
+                Tag::ExtXVersion(4),
+                Tag::ExtXTargetDuration(10),
+                range(None),
+                segment("a.ts"),
+                range(Some(0)),
+                segment("a.ts"),
+                range(None),
+                segment("a.ts"),
+                range(None),
+                segment("b.ts"),
+            ],
+        };
+
+        assert_eq!(
+            playlist.validate(),
+            Err(vec![
+                ValidationError::InvalidByteRange("a.ts".to_string()),
+                ValidationError::InvalidByteRange("b.ts".to_string()),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_validate_date_time_formats() {
+        let date_range = |start_date: &str, end_date: Option<&str>| Tag::ExtXDateRange {
+            id: "ad".to_string(),
+            class: None,
+            start_date: start_date.to_string(),
+            cue: None,
+            end_date: end_date.map(str::to_string),
+            duration: None,
+            planned_duration: None,
+            end_on_next: None,
+            scte35_cmd: None,
+            scte35_out: None,
+            scte35_in: None,
+            extra_attributes: Vec::new(),
+        };
+        let valid = Playlist {
+            tags: vec![
+                Tag::ExtM3U,
+                Tag::ExtXTargetDuration(10),
+                Tag::ExtXProgramDateTime("2010-02-19T14:54:23.031+08:00".to_string()),
+                date_range("2024-01-01T00:00:00Z", Some("2024-01-01T00:00:30.5Z")),
+                Tag::ExtXProgramDateTime("2024-12-31T23:59:60-0500".to_string()),
+            ],
+        };
+        let invalid = Playlist {
+            tags: vec![
+                Tag::ExtM3U,
+                Tag::ExtXTargetDuration(10),
+                Tag::ExtXProgramDateTime("yesterday".to_string()),
+                date_range("2024-13-01T00:00:00Z", Some("2024-01-01 00:00:00Z")),
+            ],
+        };
+
+        assert_eq!(valid.validate(), Ok(()));
+        assert_eq!(
+            invalid.validate(),
+            Err(vec![
+                ValidationError::InvalidProgramDateTime,
+                ValidationError::InvalidDateRangeStartDate,
+                ValidationError::InvalidDateRangeEndDate,
+            ])
+        );
     }
 }

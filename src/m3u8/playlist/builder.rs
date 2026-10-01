@@ -1,5 +1,5 @@
 use crate::m3u8::playlist::Playlist;
-use crate::m3u8::tags::{Key, Map, Tag};
+use crate::m3u8::tags::{ByteRange, Key, Map, Tag};
 use crate::m3u8::validation::ValidationError;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -96,10 +96,10 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXMap` tag.
-    pub fn map(self, uri: &str, byterange: Option<&str>) -> Self {
+    pub fn map(self, uri: &str, byterange: Option<ByteRange>) -> Self {
         self.tags.borrow_mut().push(Tag::ExtXMap(Map {
             uri: uri.to_string(),
-            byterange: byterange.map(|s| s.to_string()),
+            byterange,
         }));
         self
     }
@@ -119,10 +119,8 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXByteRange` tag.
-    pub fn byte_range(self, byterange: &str) -> Self {
-        self.tags
-            .borrow_mut()
-            .push(Tag::ExtXByteRange(byterange.to_string()));
+    pub fn byte_range(self, byterange: ByteRange) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtXByteRange(byterange));
         self
     }
 
@@ -227,9 +225,9 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXStart` tag.
-    pub fn start(self, time_offset: &str, precise: Option<bool>) -> Self {
+    pub fn start(self, time_offset: f64, precise: Option<bool>) -> Self {
         self.tags.borrow_mut().push(Tag::ExtXStart {
-            time_offset: time_offset.to_string(),
+            time_offset,
             precise,
         });
         self

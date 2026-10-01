@@ -128,7 +128,7 @@ pub(crate) fn optional_boolean(
         .transpose()
 }
 
-pub(crate) fn optional_number<T: std::str::FromStr>(
+pub(crate) fn optional_parsed<T: std::str::FromStr>(
     attributes: &[Attribute],
     name: &'static str,
     tag: &'static str,
@@ -146,12 +146,12 @@ pub(crate) fn optional_number<T: std::str::FromStr>(
         .transpose()
 }
 
-pub(crate) fn required_number<T: std::str::FromStr>(
+pub(crate) fn required_parsed<T: std::str::FromStr>(
     attributes: &[Attribute],
     name: &'static str,
     tag: &'static str,
 ) -> Result<T, SyntaxError> {
-    optional_number(attributes, name, tag)?.ok_or(SyntaxError::MissingAttribute {
+    optional_parsed(attributes, name, tag)?.ok_or(SyntaxError::MissingAttribute {
         tag,
         attribute: name,
     })

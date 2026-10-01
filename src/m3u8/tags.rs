@@ -39,7 +39,7 @@ pub enum Tag {
     /// Specifies the program date and time.
     ExtXProgramDateTime(String),
     /// Represents a byte range.
-    ExtXByteRange(String),
+    ExtXByteRange(ByteRange),
     /// Defines a custom tag with a specific value.
     ExtXDefine(String),
     /// Represents media information.
@@ -102,7 +102,8 @@ pub enum Tag {
     ExtXIndependentSegments,
     /// Specifies the start time offset.
     ExtXStart {
-        time_offset: String,
+        /// Offset in seconds; negative values count from the end of the playlist.
+        time_offset: f64,
         precise: Option<bool>,
     },
     /// Provides server control information.
@@ -134,7 +135,7 @@ pub enum Tag {
         uri: String,
         duration: f64,
         independent: Option<bool>,
-        byterange: Option<String>,
+        byterange: Option<ByteRange>,
         gap: Option<bool>,
     },
     /// Indicates a skip in the playlist.
@@ -195,8 +196,41 @@ impl std::fmt::Display for Key {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Map {
     pub uri: String,
-    /// Byte range in `<n>[@<o>]` form.
-    pub byterange: Option<String>,
+    pub byterange: Option<ByteRange>,
+}
+
+/// A sub-range of a resource in `<length>[@<offset>]` form.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct ByteRange {
+    /// Length of the sub-range in bytes.
+    pub length: u64,
+    /// Start of the sub-range in bytes; when absent it follows the previous sub-range.
+    pub offset: Option<u64>,
+}
+
+impl std::str::FromStr for ByteRange {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (length, offset) = match s.split_once('@') {
+            Some((length, offset)) => (length, Some(offset.parse()?)),
+            None => (s, None),
+        };
+        Ok(ByteRange {
+            length: length.parse()?,
+            offset,
+        })
+    }
+}
+
+impl std::fmt::Display for ByteRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.length)?;
+        if let Some(offset) = self.offset {
+            write!(f, "@{}", offset)?;
+        }
+        Ok(())
+    }
 }
 
 /// An attribute value whose type is not modeled, preserving whether it was quoted.

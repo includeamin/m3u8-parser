@@ -96,6 +96,7 @@ pub enum ValidationError {
     /// Error indicating that a rendition report URI is invalid.
     InvalidRenditionReportUri,
 
-    /// Error indicating that the specified start offset is invalid.
-    InvalidStartOffset,
+    /// Error indicating that a segment's EXT-X-BYTERANGE has no offset but does not
+    /// follow a sub-range of the same resource. Holds the segment URI.
+    InvalidByteRange(String),
 }

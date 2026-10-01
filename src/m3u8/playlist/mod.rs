@@ -41,10 +41,10 @@ pub mod builder;
 
 use crate::m3u8::error::{ParseError, SyntaxError};
 use crate::m3u8::parser::{
-    optional_boolean, optional_number, optional_string, parse_attribute_list, required_number,
-    required_string, Attribute,
+    attribute, optional_boolean, optional_parsed, optional_string, parse_attribute_list,
+    required_parsed, required_string, Attribute,
 };
-use crate::m3u8::tags::{Key, Map, Tag};
+use crate::m3u8::tags::{ByteRange, Key, Map, Tag};
 use crate::m3u8::validation::ValidationError;
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Write};
@@ -74,7 +74,7 @@ pub struct MediaSegment {
     /// The effective encryption key; `None` when unencrypted or after `METHOD=NONE`.
     pub key: Option<Key>,
     pub map: Option<Map>,
-    pub byterange: Option<String>,
+    pub byterange: Option<ByteRange>,
     pub program_date_time: Option<String>,
     pub gap: bool,
 }
@@ -190,7 +190,7 @@ impl Playlist {
                     key = (value.method != "NONE").then(|| value.clone());
                 }
                 Tag::ExtXMap(value) => map = Some(value.clone()),
-                Tag::ExtXByteRange(value) => byterange = Some(value.clone()),
+                Tag::ExtXByteRange(value) => byterange = Some(*value),
                 Tag::ExtXProgramDateTime(value) => program_date_time = Some(value.clone()),
                 Tag::ExtXGap => gap = true,
                 Tag::ExtInf {
@@ -297,7 +297,7 @@ impl Playlist {
                     ));
                 }
             }
-            Tag::ExtXProgramDateTime(date_time) if date_time.is_empty() => {
+            Tag::ExtXProgramDateTime(date_time) if !is_date_time(date_time) => {
                 errors.push(ValidationError::InvalidProgramDateTime);
             }
             Tag::ExtXDateRange {
@@ -313,10 +313,13 @@ impl Playlist {
                 if id.is_empty() {
                     errors.push(ValidationError::InvalidDateRangeId);
                 }
-                if start_date.is_empty() {
+                if !is_date_time(start_date) {
                     errors.push(ValidationError::InvalidDateRangeStartDate);
                 }
-                if end_date.as_deref().is_some_and(str::is_empty) {
+                if end_date
+                    .as_deref()
+                    .is_some_and(|end_date| !is_date_time(end_date))
+                {
                     errors.push(ValidationError::InvalidDateRangeEndDate);
                 }
                 if let Some(duration) = duration {
@@ -340,9 +343,6 @@ impl Playlist {
                         "END-ON-NEXT requires CLASS and forbids END-DATE and DURATION".to_string(),
                     ));
                 }
-            }
-            Tag::ExtXStart { time_offset, .. } if time_offset.is_empty() => {
-                errors.push(ValidationError::InvalidStartOffset);
             }
             Tag::ExtXPreloadHint { uri, .. } if uri.is_empty() => {
                 errors.push(ValidationError::InvalidPreloadHintUri);
@@ -438,6 +438,25 @@ impl Playlist {
             }
         }
 
+        // A byte range without an offset continues the previous segment's sub-range.
+        let mut pending_range = None;
+        let mut previous_segment: Option<(&str, bool)> = None;
+        for tag in &self.tags {
+            match tag {
+                Tag::ExtXByteRange(range) => pending_range = Some(range),
+                Tag::ExtInf { uri, .. } => {
+                    let range = pending_range.take();
+                    if range.is_some_and(|range| range.offset.is_none())
+                        && previous_segment != Some((uri.as_str(), true))
+                    {
+                        errors.push(ValidationError::InvalidByteRange(uri.clone()));
+                    }
+                    previous_segment = Some((uri.as_str(), range.is_some()));
+                }
+                _ => {}
+            }
+        }
+
         let version = self
             .tags
             .iter()
@@ -526,7 +545,7 @@ fn parse_tag(line: &str) -> Result<Option<Tag>, SyntaxError> {
             Tag::ExtXProgramDateTime(non_empty(value, "EXT-X-PROGRAM-DATE-TIME")?)
         }
         ("EXT-X-BYTERANGE", Some(value)) => {
-            Tag::ExtXByteRange(non_empty(value, "EXT-X-BYTERANGE")?)
+            Tag::ExtXByteRange(parse_value(value, "EXT-X-BYTERANGE")?)
         }
         ("EXT-X-DEFINE", Some(value)) => {
             attributes()?;
@@ -545,7 +564,7 @@ fn parse_tag(line: &str) -> Result<Option<Tag>, SyntaxError> {
         ("EXT-X-SESSION-DATA", Some(_)) => parse_session_data(&attributes()?)?,
         ("EXT-X-SERVER-CONTROL", Some(_)) => parse_server_control(&attributes()?)?,
         ("EXT-X-PART-INF", Some(_)) => Tag::ExtXPartInf {
-            part_target_duration: required_number(&attributes()?, "PART-TARGET", "EXT-X-PART-INF")?,
+            part_target_duration: required_parsed(&attributes()?, "PART-TARGET", "EXT-X-PART-INF")?,
         },
         ("EXT-X-PART", Some(_)) => parse_part(&attributes()?)?,
         ("EXT-X-SKIP", Some(_)) => parse_skip(&attributes()?)?,
@@ -589,7 +608,10 @@ fn parse_key(attributes: &[Attribute], tag: &'static str) -> Result<Key, SyntaxE
 fn parse_map(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     Ok(Tag::ExtXMap(Map {
         uri: required_string(attributes, "URI", "EXT-X-MAP")?,
-        byterange: optional_string(attributes, "BYTERANGE").filter(|value| !value.is_empty()),
+        byterange: match attribute(attributes, "BYTERANGE") {
+            None | Some("") => None,
+            Some(_) => optional_parsed(attributes, "BYTERANGE", "EXT-X-MAP")?,
+        },
     }))
 }
 
@@ -680,7 +702,7 @@ fn parse_attribute_value<T: std::str::FromStr>(
 
 fn parse_start(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     Ok(Tag::ExtXStart {
-        time_offset: required_string(attributes, "TIME-OFFSET", "EXT-X-START")?,
+        time_offset: required_parsed(attributes, "TIME-OFFSET", "EXT-X-START")?,
         precise: optional_boolean(attributes, "PRECISE", "EXT-X-START")?,
     })
 }
@@ -688,11 +710,11 @@ fn parse_start(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
 fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     const TAG: &str = "EXT-X-STREAM-INF";
     Ok(Tag::ExtXStreamInf {
-        bandwidth: required_number(attributes, "BANDWIDTH", TAG)?,
-        average_bandwidth: optional_number(attributes, "AVERAGE-BANDWIDTH", TAG)?,
+        bandwidth: required_parsed(attributes, "BANDWIDTH", TAG)?,
+        average_bandwidth: optional_parsed(attributes, "AVERAGE-BANDWIDTH", TAG)?,
         codecs: optional_string(attributes, "CODECS"),
         resolution: optional_string(attributes, "RESOLUTION"),
-        frame_rate: optional_number(attributes, "FRAME-RATE", TAG)?,
+        frame_rate: optional_parsed(attributes, "FRAME-RATE", TAG)?,
         audio: optional_string(attributes, "AUDIO"),
         video: optional_string(attributes, "VIDEO"),
         subtitle: optional_string(attributes, "SUBTITLES"),
@@ -703,11 +725,11 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
 fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     const TAG: &str = "EXT-X-I-FRAME-STREAM-INF";
     Ok(Tag::ExtXIFrameStreamInf {
-        bandwidth: required_number(attributes, "BANDWIDTH", TAG)?,
-        average_bandwidth: optional_number(attributes, "AVERAGE-BANDWIDTH", TAG)?,
+        bandwidth: required_parsed(attributes, "BANDWIDTH", TAG)?,
+        average_bandwidth: optional_parsed(attributes, "AVERAGE-BANDWIDTH", TAG)?,
         codecs: optional_string(attributes, "CODECS"),
         resolution: optional_string(attributes, "RESOLUTION"),
-        frame_rate: optional_number(attributes, "FRAME-RATE", TAG)?,
+        frame_rate: optional_parsed(attributes, "FRAME-RATE", TAG)?,
         uri: required_string(attributes, "URI", TAG)?,
     })
 }
@@ -752,10 +774,10 @@ fn parse_session_data(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
 fn parse_server_control(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     const TAG: &str = "EXT-X-SERVER-CONTROL";
     Ok(Tag::ExtXServerControl {
-        can_skip_until: optional_number(attributes, "CAN-SKIP-UNTIL", TAG)?,
+        can_skip_until: optional_parsed(attributes, "CAN-SKIP-UNTIL", TAG)?,
         can_skip_dateranges: optional_boolean(attributes, "CAN-SKIP-DATERANGES", TAG)?,
-        hold_back: optional_number(attributes, "HOLD-BACK", TAG)?,
-        part_hold_back: optional_number(attributes, "PART-HOLD-BACK", TAG)?,
+        hold_back: optional_parsed(attributes, "HOLD-BACK", TAG)?,
+        part_hold_back: optional_parsed(attributes, "PART-HOLD-BACK", TAG)?,
         can_block_reload: optional_boolean(attributes, "CAN-BLOCK-RELOAD", TAG)?,
     })
 }
@@ -764,16 +786,16 @@ fn parse_part(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     const TAG: &str = "EXT-X-PART";
     Ok(Tag::ExtXPart {
         uri: required_string(attributes, "URI", TAG)?,
-        duration: required_number(attributes, "DURATION", TAG)?,
+        duration: required_parsed(attributes, "DURATION", TAG)?,
         independent: optional_boolean(attributes, "INDEPENDENT", TAG)?,
-        byterange: optional_string(attributes, "BYTERANGE"),
+        byterange: optional_parsed(attributes, "BYTERANGE", TAG)?,
         gap: optional_boolean(attributes, "GAP", TAG)?,
     })
 }
 
 fn parse_skip(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     Ok(Tag::ExtXSkip {
-        skipped_segments: required_number(attributes, "SKIPPED-SEGMENTS", "EXT-X-SKIP")?,
+        skipped_segments: required_parsed(attributes, "SKIPPED-SEGMENTS", "EXT-X-SKIP")?,
         recently_removed_dateranges: optional_string(attributes, "RECENTLY-REMOVED-DATERANGES"),
     })
 }
@@ -783,8 +805,8 @@ fn parse_preload_hint(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     Ok(Tag::ExtXPreloadHint {
         type_: required_string(attributes, "TYPE", TAG)?,
         uri: required_string(attributes, "URI", TAG)?,
-        byterange_start: optional_number(attributes, "BYTERANGE-START", TAG)?,
-        byterange_length: optional_number(attributes, "BYTERANGE-LENGTH", TAG)?,
+        byterange_start: optional_parsed(attributes, "BYTERANGE-START", TAG)?,
+        byterange_length: optional_parsed(attributes, "BYTERANGE-LENGTH", TAG)?,
     })
 }
 
@@ -792,9 +814,61 @@ fn parse_rendition_report(attributes: &[Attribute]) -> Result<Tag, SyntaxError> 
     const TAG: &str = "EXT-X-RENDITION-REPORT";
     Ok(Tag::ExtXRenditionReport {
         uri: required_string(attributes, "URI", TAG)?,
-        last_msn: optional_number(attributes, "LAST-MSN", TAG)?,
-        last_part: optional_number(attributes, "LAST-PART", TAG)?,
+        last_msn: optional_parsed(attributes, "LAST-MSN", TAG)?,
+        last_part: optional_parsed(attributes, "LAST-PART", TAG)?,
     })
+}
+
+/// Checks the ISO 8601 date-time form HLS uses, e.g. `2010-02-19T14:54:23.031+08:00`.
+fn is_date_time(value: &str) -> bool {
+    fn number_in(value: &str, digits: usize, min: u32, max: u32) -> bool {
+        value.len() == digits
+            && value.bytes().all(|byte| byte.is_ascii_digit())
+            && value
+                .parse()
+                .is_ok_and(|number: u32| (min..=max).contains(&number))
+    }
+
+    let Some((date, time)) = value.split_once('T') else {
+        return false;
+    };
+    let date_ok = matches!(
+        date.split('-').collect::<Vec<_>>().as_slice(),
+        [year, month, day] if number_in(year, 4, 0, 9999)
+            && number_in(month, 2, 1, 12)
+            && number_in(day, 2, 1, 31)
+    );
+
+    let (clock, zone) = time.split_at(time.find(['Z', '+', '-']).unwrap_or(time.len()));
+    let (clock, fraction) = match clock.split_once('.') {
+        Some((clock, fraction)) => (clock, Some(fraction)),
+        None => (clock, None),
+    };
+    let fraction_ok = fraction.is_none_or(|fraction| {
+        !fraction.is_empty() && fraction.bytes().all(|b| b.is_ascii_digit())
+    });
+    let clock_ok = match clock.split(':').collect::<Vec<_>>().as_slice() {
+        [hour, minute] => {
+            fraction.is_none() && number_in(hour, 2, 0, 23) && number_in(minute, 2, 0, 59)
+        }
+        [hour, minute, second] => {
+            number_in(hour, 2, 0, 23) && number_in(minute, 2, 0, 59) && number_in(second, 2, 0, 60)
+        }
+        _ => false,
+    };
+    let zone_ok = match zone {
+        "" | "Z" => true,
+        _ => {
+            let offset = zone[1..].replace(':', "");
+            match offset.len() {
+                2 => number_in(&offset, 2, 0, 23),
+                4 => number_in(&offset[..2], 2, 0, 23) && number_in(&offset[2..], 2, 0, 59),
+                _ => false,
+            }
+        }
+    };
+
+    date_ok && fraction_ok && clock_ok && zone_ok
 }
 
 fn validate_key(key: &Key, tag: &str, errors: &mut Vec<ValidationError>) {
