@@ -2,7 +2,7 @@
 //!
 //! This module defines the `Playlist` struct, which represents an M3U8 playlist
 //! consisting of various tags. The `Playlist` struct provides methods for reading
-//! playlists from files or buffered readers, writing playlists to files, and
+//! playlists from files or readers, writing playlists to files, and
 //! validating the playlist structure according to the M3U8 specification (RFC 8216).
 //!
 //! # Example
@@ -21,106 +21,33 @@
 //! ## Structs
 //!
 //! - `Playlist`: A struct representing an M3U8 playlist that contains a vector of `Tag` items.
+//! - `MediaSegment`: A media segment with the state established by preceding tags.
 //!
 //! ## Methods
 //!
-//! - `from_reader<R: BufRead>(reader: R) -> Result<Self, String>`: Creates a new `Playlist` by reading tags from a buffered reader.
-//! - `from_file<P: AsRef<Path>>(path: P) -> Result<Self, String>`: Creates a new `Playlist` by reading tags from a specified file.
+//! - `from_reader<R: Read>(reader: R) -> Result<Self, ParseError>`: Creates a new `Playlist` by reading tags from a reader.
+//! - `from_file<P: AsRef<Path>>(path: P) -> Result<Self, ParseError>`: Creates a new `Playlist` by reading tags from a specified file.
 //! - `write_to_file<P: AsRef<Path>>(&self, path: P) -> io::Result<()>`: Writes the playlist to a specified file.
+//! - `media_segments(&self) -> Vec<MediaSegment>`: Returns the media segments with their effective state.
 //! - `validate(&self) -> Result<(), Vec<ValidationError>>`: Validates the playlist according to RFC 8216, returning any validation errors.
 
 pub mod builder;
 
-use crate::m3u8::tags::Tag;
+use crate::m3u8::error::{ParseError, SyntaxError};
+use crate::m3u8::parser::{
+    optional_boolean, optional_number, optional_string, parse_attribute_list, required_number,
+    required_string, Attribute,
+};
+use crate::m3u8::tags::{Key, Map, Tag};
 use crate::m3u8::validation::ValidationError;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 
+/// The highest EXT-X-VERSION defined by the HLS specification (draft-pantos-hls-rfc8216bis).
+const MAX_VERSION: u8 = 12;
+
 type TagPredicate = fn(&Tag) -> bool;
-
-fn parse_attribute_list(input: &str) -> Result<Vec<(String, String)>, String> {
-    let mut attributes = Vec::new();
-    let mut remaining = input.trim();
-
-    while !remaining.is_empty() {
-        let Some(equals_index) = remaining.find('=') else {
-            return Err(format!("invalid attribute list: {input}"));
-        };
-        let name = remaining[..equals_index].trim();
-        if name.is_empty() || name.contains(',') {
-            return Err(format!("invalid attribute name in: {input}"));
-        }
-
-        let value_start = remaining[equals_index + 1..].trim_start();
-        let (value, after_value) = if let Some(quoted) = value_start.strip_prefix('"') {
-            let Some(end) = quoted.find('"') else {
-                return Err(format!("unterminated quoted attribute in: {input}"));
-            };
-            (&quoted[..end], &quoted[end + 1..])
-        } else {
-            let end = value_start.find(',').unwrap_or(value_start.len());
-            (&value_start[..end], &value_start[end..])
-        };
-        attributes.push((name.to_string(), value.to_string()));
-
-        let after_value = after_value.trim_start();
-        if after_value.is_empty() {
-            break;
-        }
-        let Some(next) = after_value.strip_prefix(',') else {
-            return Err(format!("missing comma between attributes in: {input}"));
-        };
-        remaining = next.trim_start();
-    }
-
-    Ok(attributes)
-}
-
-fn attribute<'a>(attributes: &'a [(String, String)], name: &str) -> Option<&'a str> {
-    attributes
-        .iter()
-        .find(|(attribute_name, _)| attribute_name == name)
-        .map(|(_, value)| value.as_str())
-}
-
-fn required_attribute(
-    attributes: &[(String, String)],
-    name: &str,
-    tag_name: &str,
-) -> Result<String, String> {
-    attribute(attributes, name)
-        .map(str::to_owned)
-        .ok_or_else(|| format!("{tag_name} requires {name}"))
-}
-
-fn optional_boolean(
-    attributes: &[(String, String)],
-    name: &str,
-    tag_name: &str,
-) -> Result<Option<bool>, String> {
-    attribute(attributes, name)
-        .map(|value| match value {
-            "YES" => Ok(true),
-            "NO" => Ok(false),
-            _ => Err(format!("invalid {tag_name} {name}: {value}")),
-        })
-        .transpose()
-}
-
-fn optional_number<T: std::str::FromStr>(
-    attributes: &[(String, String)],
-    name: &str,
-    tag_name: &str,
-) -> Result<Option<T>, String> {
-    attribute(attributes, name)
-        .map(|value| {
-            value
-                .parse()
-                .map_err(|_| format!("invalid {tag_name} {name}: {value}"))
-        })
-        .transpose()
-}
 
 /// Represents a playlist containing multiple tags.
 #[derive(Debug, PartialEq)]
@@ -134,75 +61,76 @@ pub struct MediaSegment {
     pub uri: String,
     pub duration: f32,
     pub title: Option<String>,
-    pub key: Option<Tag>,
-    pub map: Option<Tag>,
+    /// The Media Sequence Number, starting from EXT-X-MEDIA-SEQUENCE (default 0).
+    pub sequence: u64,
+    /// Whether an EXT-X-DISCONTINUITY precedes this segment.
+    pub discontinuity: bool,
+    /// The effective encryption key; `None` when unencrypted or after `METHOD=NONE`.
+    pub key: Option<Key>,
+    pub map: Option<Map>,
     pub byterange: Option<String>,
     pub program_date_time: Option<String>,
     pub gap: bool,
 }
 
 impl Playlist {
-    /// Creates a new `Playlist` by reading tags from a buffered reader.
-    pub fn from_reader<R: BufRead>(mut reader: R) -> Result<Self, String> {
+    /// Creates a new `Playlist` by reading tags from a reader.
+    pub fn from_reader<R: Read>(mut reader: R) -> Result<Self, ParseError> {
         let mut tags = Vec::new();
         let mut pending_extinf = None;
 
         let mut content = String::new();
-        reader
-            .read_to_string(&mut content)
-            .map_err(|e| e.to_string())?;
+        reader.read_to_string(&mut content)?;
+        let content = content.strip_prefix('\u{feff}').unwrap_or(&content);
 
-        for (line_number, line) in content.lines().enumerate() {
+        for (index, line) in content.lines().enumerate() {
+            let line_number = index + 1;
+            let syntax_error = |kind| ParseError::Syntax {
+                line: line_number,
+                kind,
+            };
             let trimmed = line.trim();
             if trimmed.is_empty() {
                 continue;
             }
 
             if let Some(extinf) = trimmed.strip_prefix("#EXTINF:") {
-                if pending_extinf.is_some() {
-                    return Err(format!("missing URI after EXTINF on line {}", line_number));
+                if let Some((_, _, extinf_line)) = pending_extinf {
+                    return Err(ParseError::Syntax {
+                        line: extinf_line,
+                        kind: SyntaxError::MissingUriAfterExtInf,
+                    });
                 }
-                let (duration, title) = extinf
-                    .split_once(',')
-                    .ok_or_else(|| format!("invalid EXTINF on line {}", line_number + 1))?;
-                let duration = duration
-                    .parse()
-                    .map_err(|_| format!("invalid EXTINF duration on line {}", line_number + 1))?;
-                let title = (!title.trim().is_empty()).then(|| title.trim().to_string());
-                pending_extinf = Some((duration, title));
+                let (duration, title) = parse_extinf(extinf).map_err(syntax_error)?;
+                pending_extinf = Some((duration, title, line_number));
                 continue;
             }
 
-            if let Some((duration, title)) = pending_extinf.take() {
-                if trimmed.starts_with('#') {
-                    return Err(format!("missing URI after EXTINF on line {}", line_number));
-                }
-                tags.push(Tag::ExtInf(trimmed.to_string(), duration, title));
-                continue;
-            }
-
+            // Tags between EXTINF and its URI (e.g. EXT-X-BYTERANGE) are kept
+            // ahead of the segment, which RFC 8216 treats equivalently.
             if let Some(tag_line) = trimmed.strip_prefix('#') {
-                if let Some(tag) = Self::parse_line(tag_line)? {
-                    tags.push(tag);
-                } else {
-                    tags.push(Tag::Unknown(tag_line.to_string()));
-                }
+                let tag = parse_tag(tag_line).map_err(syntax_error)?;
+                tags.push(tag.unwrap_or_else(|| Tag::Unknown(tag_line.to_string())));
+            } else if let Some((duration, title, _)) = pending_extinf.take() {
+                tags.push(Tag::ExtInf(trimmed.to_string(), duration, title));
             } else {
                 tags.push(Tag::Uri(trimmed.to_string()));
             }
         }
 
-        if pending_extinf.is_some() {
-            return Err("missing URI after EXTINF at end of playlist".to_string());
+        if let Some((_, _, extinf_line)) = pending_extinf {
+            return Err(ParseError::Syntax {
+                line: extinf_line,
+                kind: SyntaxError::MissingUriAfterExtInf,
+            });
         }
 
         Ok(Playlist { tags })
     }
 
     /// Creates a new `Playlist` by reading tags from a file.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
-        let file = File::open(path).map_err(|e| e.to_string())?;
-        Self::from_reader(BufReader::new(file))
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ParseError> {
+        Self::from_reader(File::open(path)?)
     }
 
     /// Writes the playlist to a file.
@@ -217,6 +145,8 @@ impl Playlist {
     /// Returns media segments with effective state from preceding tags.
     pub fn media_segments(&self) -> Vec<MediaSegment> {
         let mut segments = Vec::new();
+        let mut sequence = 0;
+        let mut discontinuity = false;
         let mut key = None;
         let mut map = None;
         let mut byterange = None;
@@ -225,8 +155,12 @@ impl Playlist {
 
         for tag in &self.tags {
             match tag {
-                Tag::ExtXKey { .. } => key = Some(tag.clone()),
-                Tag::ExtXMap { .. } => map = Some(tag.clone()),
+                Tag::ExtXMediaSequence(first) => sequence = *first,
+                Tag::ExtXDiscontinuity => discontinuity = true,
+                Tag::ExtXKey(value) => {
+                    key = (value.method != "NONE").then(|| value.clone());
+                }
+                Tag::ExtXMap(value) => map = Some(value.clone()),
                 Tag::ExtXByteRange(value) => byterange = Some(value.clone()),
                 Tag::ExtXProgramDateTime(value) => program_date_time = Some(value.clone()),
                 Tag::ExtXGap => gap = true,
@@ -235,12 +169,15 @@ impl Playlist {
                         uri: uri.clone(),
                         duration: *duration,
                         title: title.clone(),
+                        sequence,
+                        discontinuity: std::mem::take(&mut discontinuity),
                         key: key.clone(),
                         map: map.clone(),
                         byterange: byterange.take(),
                         program_date_time: program_date_time.take(),
                         gap: std::mem::take(&mut gap),
                     });
+                    sequence += 1;
                 }
                 _ => {}
             }
@@ -261,9 +198,7 @@ impl Playlist {
             self.validate_tag(tag, &mut errors);
         }
 
-        if errors.is_empty() {
-            self.validate_playlist_rules(&mut errors);
-        }
+        self.validate_playlist_rules(&mut errors);
 
         if errors.is_empty() {
             Ok(())
@@ -272,375 +207,10 @@ impl Playlist {
         }
     }
 
-    fn parse_line(line: &str) -> Result<Option<Tag>, String> {
-        let trimmed = line.trim();
-
-        if trimmed == "EXTM3U" {
-            return Ok(Some(Tag::ExtM3U));
-        }
-
-        if trimmed == "EXT-X-I-FRAMES-ONLY" {
-            return Ok(Some(Tag::ExtXIFramesOnly));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-ALLOW-CACHE:") {
-            return match value {
-                "YES" => Ok(Some(Tag::ExtXAllowCache(true))),
-                "NO" => Ok(Some(Tag::ExtXAllowCache(false))),
-                _ => Err(format!("invalid EXT-X-ALLOW-CACHE value: {value}")),
-            };
-        }
-
-        Self::parse_existing_line(trimmed)
-    }
-
-    fn parse_existing_line(trimmed: &str) -> Result<Option<Tag>, String> {
-        if let Some(value) = trimmed.strip_prefix("EXT-X-VERSION:") {
-            return value
-                .parse()
-                .map(Tag::ExtXVersion)
-                .map(Some)
-                .map_err(|_| format!("invalid EXT-X-VERSION: {value}"));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-TARGETDURATION:") {
-            return value
-                .parse()
-                .map(Tag::ExtXTargetDuration)
-                .map(Some)
-                .map_err(|_| format!("invalid EXT-X-TARGETDURATION: {value}"));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-PLAYLIST-TYPE:") {
-            return match value {
-                "EVENT" | "VOD" => Ok(Some(Tag::ExtXPlaylistType(value.to_string()))),
-                _ => Err(format!("invalid EXT-X-PLAYLIST-TYPE: {value}")),
-            };
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-MEDIA-SEQUENCE:") {
-            return value
-                .parse()
-                .map(Tag::ExtXMediaSequence)
-                .map(Some)
-                .map_err(|_| format!("invalid EXT-X-MEDIA-SEQUENCE: {value}"));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-DISCONTINUITY-SEQUENCE:") {
-            return value
-                .parse()
-                .map(Tag::ExtXDiscontinuitySequence)
-                .map(Some)
-                .map_err(|_| format!("invalid EXT-X-DISCONTINUITY-SEQUENCE: {value}"));
-        }
-
-        if trimmed == "EXT-X-ENDLIST" {
-            return Ok(Some(Tag::ExtXEndList));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-KEY:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXKey {
-                method: required_attribute(&attributes, "METHOD", "EXT-X-KEY")?,
-                uri: attribute(&attributes, "URI").map(str::to_owned),
-                iv: attribute(&attributes, "IV").map(str::to_owned),
-                keyformat: attribute(&attributes, "KEYFORMAT").map(str::to_owned),
-                keyformatversions: attribute(&attributes, "KEYFORMATVERSIONS").map(str::to_owned),
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-MAP:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXMap {
-                uri: required_attribute(&attributes, "URI", "EXT-X-MAP")?,
-                byterange: attribute(&attributes, "BYTERANGE")
-                    .filter(|value| !value.is_empty())
-                    .map(str::to_owned),
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-PROGRAM-DATE-TIME:") {
-            if value.is_empty() {
-                return Err("EXT-X-PROGRAM-DATE-TIME requires a date".to_string());
-            }
-            return Ok(Some(Tag::ExtXProgramDateTime(value.to_string())));
-        }
-
-        if trimmed == "EXT-X-DISCONTINUITY" {
-            return Ok(Some(Tag::ExtXDiscontinuity));
-        }
-
-        if trimmed == "EXT-X-GAP" {
-            return Ok(Some(Tag::ExtXGap));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-BYTERANGE:") {
-            if value.is_empty() {
-                return Err("EXT-X-BYTERANGE requires a value".to_string());
-            }
-            return Ok(Some(Tag::ExtXByteRange(value.to_string())));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-DEFINE:") {
-            parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXDefine(value.to_string())));
-        }
-
-        if let Some(attributes) = trimmed.strip_prefix("EXT-X-DATERANGE:") {
-            let attributes = parse_attribute_list(attributes)?;
-            let mut id = None;
-            let mut class = None;
-            let mut start_date = None;
-            let mut end_date = None;
-            let mut duration = None;
-            let mut planned_duration = None;
-            let mut end_on_next = None;
-            let mut scte35_cmd = None;
-            let mut scte35_out = None;
-            let mut scte35_in = None;
-            let mut client_attributes = Vec::new();
-
-            for (name, value) in attributes {
-                match name.as_str() {
-                    "ID" => id = Some(value),
-                    "CLASS" => class = Some(value),
-                    "START-DATE" => start_date = Some(value),
-                    "END-DATE" => end_date = Some(value),
-                    "DURATION" => {
-                        duration =
-                            Some(value.parse().map_err(|_| {
-                                format!("invalid EXT-X-DATERANGE DURATION: {value}")
-                            })?)
-                    }
-                    "PLANNED-DURATION" => {
-                        planned_duration = Some(value.parse().map_err(|_| {
-                            format!("invalid EXT-X-DATERANGE PLANNED-DURATION: {value}")
-                        })?)
-                    }
-                    "END-ON-NEXT" => {
-                        end_on_next = Some(match value.as_str() {
-                            "YES" => true,
-                            "NO" => false,
-                            _ => {
-                                return Err(format!("invalid EXT-X-DATERANGE END-ON-NEXT: {value}"))
-                            }
-                        })
-                    }
-                    "SCTE35-CMD" => scte35_cmd = Some(value),
-                    "SCTE35-OUT" => scte35_out = Some(value),
-                    "SCTE35-IN" => scte35_in = Some(value),
-                    name if name.starts_with("X-") => {
-                        client_attributes.push((name.to_string(), value))
-                    }
-                    _ => return Err(format!("unknown EXT-X-DATERANGE attribute: {name}")),
-                }
-            }
-
-            let id = id.ok_or_else(|| "EXT-X-DATERANGE requires ID".to_string())?;
-            let start_date =
-                start_date.ok_or_else(|| "EXT-X-DATERANGE requires START-DATE".to_string())?;
-            return Ok(Some(Tag::ExtXDateRange {
-                id,
-                class,
-                start_date,
-                end_date,
-                duration,
-                planned_duration,
-                end_on_next,
-                scte35_cmd,
-                scte35_out,
-                scte35_in,
-                client_attributes,
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-PART-INF:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXPartInf {
-                part_target_duration: required_attribute(
-                    &attributes,
-                    "PART-TARGET",
-                    "EXT-X-PART-INF",
-                )?
-                .parse()
-                .map_err(|_| "invalid EXT-X-PART-INF PART-TARGET".to_string())?,
-                part_hold_back: optional_number(&attributes, "PART-HOLD-BACK", "EXT-X-PART-INF")?,
-                part_number: optional_number(&attributes, "PART-NUMBER", "EXT-X-PART-INF")?,
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-PART:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXPart {
-                uri: required_attribute(&attributes, "URI", "EXT-X-PART")?,
-                duration: optional_number(&attributes, "DURATION", "EXT-X-PART")?,
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-SERVER-CONTROL:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXServerControl {
-                can_play: optional_boolean(&attributes, "CAN-PLAY", "EXT-X-SERVER-CONTROL")?,
-                can_seek: optional_boolean(&attributes, "CAN-SEEK", "EXT-X-SERVER-CONTROL")?,
-                can_pause: optional_boolean(&attributes, "CAN-PAUSE", "EXT-X-SERVER-CONTROL")?,
-                min_buffer_time: optional_number(
-                    &attributes,
-                    "MIN-BUFFER-TIME",
-                    "EXT-X-SERVER-CONTROL",
-                )?,
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-SKIP:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXSkip {
-                uri: attribute(&attributes, "URI")
-                    .unwrap_or_default()
-                    .to_string(),
-                duration: optional_number(&attributes, "DURATION", "EXT-X-SKIP")?,
-                skipped_segments: required_attribute(
-                    &attributes,
-                    "SKIPPED-SEGMENTS",
-                    "EXT-X-SKIP",
-                )?
-                .parse()
-                .map_err(|_| "invalid EXT-X-SKIP SKIPPED-SEGMENTS".to_string())?,
-                reason: attribute(&attributes, "REASON").map(str::to_owned),
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-BITRATE:") {
-            return value
-                .parse()
-                .map(Tag::ExtXBitrate)
-                .map(Some)
-                .map_err(|_| format!("invalid EXT-X-BITRATE: {value}"));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-START:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXStart {
-                time_offset: required_attribute(&attributes, "TIME-OFFSET", "EXT-X-START")?,
-                precise: optional_boolean(&attributes, "PRECISE", "EXT-X-START")?,
-            }));
-        }
-
-        if trimmed == "EXT-X-INDEPENDENT-SEGMENTS" {
-            return Ok(Some(Tag::ExtXIndependentSegments));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-STREAM-INF:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXStreamInf {
-                bandwidth: required_attribute(&attributes, "BANDWIDTH", "EXT-X-STREAM-INF")?
-                    .parse()
-                    .map_err(|_| "invalid EXT-X-STREAM-INF BANDWIDTH".to_string())?,
-                average_bandwidth: optional_number(
-                    &attributes,
-                    "AVERAGE-BANDWIDTH",
-                    "EXT-X-STREAM-INF",
-                )?,
-                codecs: attribute(&attributes, "CODECS").map(str::to_owned),
-                resolution: attribute(&attributes, "RESOLUTION").map(str::to_owned),
-                frame_rate: optional_number(&attributes, "FRAME-RATE", "EXT-X-STREAM-INF")?,
-                audio: attribute(&attributes, "AUDIO").map(str::to_owned),
-                video: attribute(&attributes, "VIDEO").map(str::to_owned),
-                subtitle: attribute(&attributes, "SUBTITLES").map(str::to_owned),
-                closed_captions: attribute(&attributes, "CLOSED-CAPTIONS").map(str::to_owned),
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-MEDIA:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXMedia {
-                type_: required_attribute(&attributes, "TYPE", "EXT-X-MEDIA")?,
-                group_id: required_attribute(&attributes, "GROUP-ID", "EXT-X-MEDIA")?,
-                name: Some(required_attribute(&attributes, "NAME", "EXT-X-MEDIA")?),
-                uri: attribute(&attributes, "URI").map(str::to_owned),
-                default: optional_boolean(&attributes, "DEFAULT", "EXT-X-MEDIA")?,
-                autoplay: optional_boolean(&attributes, "AUTOSELECT", "EXT-X-MEDIA")?,
-                characteristics: attribute(&attributes, "CHARACTERISTICS").map(str::to_owned),
-                language: attribute(&attributes, "LANGUAGE").map(str::to_owned),
-                instream_id: attribute(&attributes, "INSTREAM-ID").map(str::to_owned),
-                language_codec: attribute(&attributes, "LANGUAGE-CODEC").map(str::to_owned),
-                forced: optional_boolean(&attributes, "FORCED", "EXT-X-MEDIA")?,
-                channels: attribute(&attributes, "CHANNELS").map(str::to_owned),
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-RENDITION-REPORT:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXRenditionReport {
-                uri: required_attribute(&attributes, "URI", "EXT-X-RENDITION-REPORT")?,
-                bandwidth: required_attribute(&attributes, "BANDWIDTH", "EXT-X-RENDITION-REPORT")?
-                    .parse()
-                    .map_err(|_| "invalid EXT-X-RENDITION-REPORT BANDWIDTH".to_string())?,
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-I-FRAME-STREAM-INF:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXIFrameStreamInf {
-                bandwidth: required_attribute(
-                    &attributes,
-                    "BANDWIDTH",
-                    "EXT-X-I-FRAME-STREAM-INF",
-                )?
-                .parse()
-                .map_err(|_| "invalid EXT-X-I-FRAME-STREAM-INF BANDWIDTH".to_string())?,
-                average_bandwidth: optional_number(
-                    &attributes,
-                    "AVERAGE-BANDWIDTH",
-                    "EXT-X-I-FRAME-STREAM-INF",
-                )?,
-                codecs: attribute(&attributes, "CODECS").map(str::to_owned),
-                resolution: attribute(&attributes, "RESOLUTION").map(str::to_owned),
-                frame_rate: optional_number(&attributes, "FRAME-RATE", "EXT-X-I-FRAME-STREAM-INF")?,
-                uri: required_attribute(&attributes, "URI", "EXT-X-I-FRAME-STREAM-INF")?,
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-SESSION-DATA:") {
-            let attributes = parse_attribute_list(value)?;
-            let value = attribute(&attributes, "VALUE").map(str::to_owned);
-            let uri = attribute(&attributes, "URI").map(str::to_owned);
-            if value.is_some() == uri.is_some() {
-                return Err("EXT-X-SESSION-DATA requires exactly one of VALUE or URI".to_string());
-            }
-            return Ok(Some(Tag::ExtXSessionData {
-                id: required_attribute(&attributes, "DATA-ID", "EXT-X-SESSION-DATA")?,
-                value,
-                uri,
-                language: attribute(&attributes, "LANGUAGE").map(str::to_owned),
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-PRELOAD-HINT:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXPreloadHint {
-                uri: required_attribute(&attributes, "URI", "EXT-X-PRELOAD-HINT")?,
-                byterange: attribute(&attributes, "BYTERANGE").map(str::to_owned),
-            }));
-        }
-
-        if let Some(value) = trimmed.strip_prefix("EXT-X-SESSION-KEY:") {
-            let attributes = parse_attribute_list(value)?;
-            return Ok(Some(Tag::ExtXSessionKey {
-                method: required_attribute(&attributes, "METHOD", "EXT-X-SESSION-KEY")?,
-                uri: attribute(&attributes, "URI").map(str::to_owned),
-                iv: attribute(&attributes, "IV").map(str::to_owned),
-                keyformat: attribute(&attributes, "KEYFORMAT").map(str::to_owned),
-                keyformatversions: attribute(&attributes, "KEYFORMATVERSIONS").map(str::to_owned),
-            }));
-        }
-
-        Ok(None)
-    }
-
     fn validate_tag(&self, tag: &Tag, errors: &mut Vec<ValidationError>) {
         match tag {
             Tag::ExtXVersion(version) => {
-                if *version < 1 || *version > 7 {
+                if *version < 1 || *version > MAX_VERSION {
                     errors.push(ValidationError::InvalidVersion(*version));
                 }
             }
@@ -650,48 +220,49 @@ impl Playlist {
             Tag::ExtXTargetDuration(duration) if *duration == 0 => {
                 errors.push(ValidationError::InvalidTargetDuration(*duration));
             }
-            Tag::ExtXKey { method, .. }
-                if !matches!(method.as_str(), "NONE" | "AES-128" | "SAMPLE-AES") =>
-            {
-                errors.push(ValidationError::InvalidKeyMethod(method.clone()));
-            }
-            Tag::ExtXKey {
-                method,
-                uri,
-                iv,
-                keyformat,
-                keyformatversions,
-            } => {
-                if method == "NONE"
-                    && (uri.is_some()
-                        || iv.is_some()
-                        || keyformat.is_some()
-                        || keyformatversions.is_some())
-                {
+            Tag::ExtXKey(key) => validate_key(key, "EXT-X-KEY", errors),
+            Tag::ExtXSessionKey(key) => {
+                if key.method == "NONE" {
                     errors.push(ValidationError::InvalidKeyAttributes(
-                        "METHOD=NONE must not include URI, IV, KEYFORMAT, or KEYFORMATVERSIONS"
-                            .to_string(),
+                        "EXT-X-SESSION-KEY METHOD must not be NONE".to_string(),
                     ));
-                }
-                if method != "NONE" && uri.as_deref().is_none_or(str::is_empty) {
-                    errors.push(ValidationError::InvalidKeyAttributes(
-                        "encryption methods require URI".to_string(),
-                    ));
+                } else {
+                    validate_key(key, "EXT-X-SESSION-KEY", errors);
                 }
             }
-            Tag::ExtXMap { uri, .. } if uri.is_empty() => {
+            Tag::ExtXMap(Map { uri, .. }) if uri.is_empty() => {
                 errors.push(ValidationError::InvalidMapUri);
             }
             Tag::ExtXMedia {
                 type_,
                 group_id,
                 name,
+                uri,
+                instream_id,
                 ..
-            } if type_.is_empty()
-                || group_id.is_empty()
-                || name.as_deref().is_none_or(str::is_empty) =>
-            {
-                errors.push(ValidationError::MissingMediaFields);
+            } => {
+                if type_.is_empty()
+                    || group_id.is_empty()
+                    || name.as_deref().is_none_or(str::is_empty)
+                {
+                    errors.push(ValidationError::MissingMediaFields);
+                }
+                if type_ == "CLOSED-CAPTIONS" {
+                    if instream_id.is_none() {
+                        errors.push(ValidationError::InvalidMediaAttributes(
+                            "TYPE=CLOSED-CAPTIONS requires INSTREAM-ID".to_string(),
+                        ));
+                    }
+                    if uri.is_some() {
+                        errors.push(ValidationError::InvalidMediaAttributes(
+                            "TYPE=CLOSED-CAPTIONS must not include URI".to_string(),
+                        ));
+                    }
+                } else if instream_id.is_some() {
+                    errors.push(ValidationError::InvalidMediaAttributes(
+                        "INSTREAM-ID is only allowed with TYPE=CLOSED-CAPTIONS".to_string(),
+                    ));
+                }
             }
             Tag::ExtXProgramDateTime(date_time) if date_time.is_empty() => {
                 errors.push(ValidationError::InvalidProgramDateTime);
@@ -737,36 +308,14 @@ impl Playlist {
                     ));
                 }
             }
-            Tag::ExtXGap => {
-                // Validation for EXT-X-GAP if necessary
-                // TODO: maybe we can make it configurable?
-            }
-            Tag::ExtXBitrate(bitrate) if bitrate < &0 => {
-                errors.push(ValidationError::InvalidBitrate(*bitrate));
-            }
-            Tag::ExtXIndependentSegments => {
-                // No specific validation needed
-            }
             Tag::ExtXStart { time_offset, .. } if time_offset.is_empty() => {
                 errors.push(ValidationError::InvalidStartOffset);
-            }
-            Tag::ExtXSkip {
-                duration: Some(duration),
-                ..
-            } if *duration <= 0.0 => {
-                errors.push(ValidationError::InvalidSkipTag(
-                    "Duration must be positive".to_string(),
-                ));
             }
             Tag::ExtXPreloadHint { uri, .. } if uri.is_empty() => {
                 errors.push(ValidationError::InvalidPreloadHintUri);
             }
             Tag::ExtXRenditionReport { uri, .. } if uri.is_empty() => {
                 errors.push(ValidationError::InvalidRenditionReportUri);
-            }
-            Tag::ExtXServerControl { .. } => {
-                // Add specific validations if needed
-                // TODO: maybe we can make it configurable?
             }
             _ => {}
         }
@@ -864,8 +413,9 @@ impl Playlist {
                 _ => None,
             })
             .unwrap_or(1);
+        let has_i_frames_only = self.tags.iter().any(is_i_frames_only);
         for tag in &self.tags {
-            if let Some(required) = minimum_version(tag) {
+            if let Some(required) = minimum_version(tag, has_i_frames_only) {
                 if version < required {
                     errors.push(ValidationError::InsufficientVersion {
                         tag: tag_name(tag).to_string(),
@@ -891,6 +441,350 @@ impl Playlist {
                 }
             }
         }
+    }
+}
+
+fn parse_extinf(value: &str) -> Result<(f32, Option<String>), SyntaxError> {
+    let invalid = || SyntaxError::InvalidExtInf(value.to_string());
+    let (duration, title) = value.split_once(',').ok_or_else(invalid)?;
+    let duration = duration.trim().parse().map_err(|_| invalid())?;
+    let title = title.trim();
+    Ok((duration, (!title.is_empty()).then(|| title.to_string())))
+}
+
+/// Parses a tag line without its leading `#`. Returns `Ok(None)` for unrecognized tags.
+fn parse_tag(line: &str) -> Result<Option<Tag>, SyntaxError> {
+    let (name, value) = match line.trim().split_once(':') {
+        Some((name, value)) => (name, Some(value.trim())),
+        None => (line.trim(), None),
+    };
+    let attributes = || parse_attribute_list(value.unwrap_or_default());
+
+    let tag = match (name, value) {
+        ("EXTM3U", None) => Tag::ExtM3U,
+        ("EXT-X-ENDLIST", None) => Tag::ExtXEndList,
+        ("EXT-X-I-FRAMES-ONLY", None) => Tag::ExtXIFramesOnly,
+        ("EXT-X-DISCONTINUITY", None) => Tag::ExtXDiscontinuity,
+        ("EXT-X-GAP", None) => Tag::ExtXGap,
+        ("EXT-X-INDEPENDENT-SEGMENTS", None) => Tag::ExtXIndependentSegments,
+        ("EXT-X-VERSION", Some(value)) => Tag::ExtXVersion(parse_value(value, "EXT-X-VERSION")?),
+        ("EXT-X-TARGETDURATION", Some(value)) => {
+            Tag::ExtXTargetDuration(parse_value(value, "EXT-X-TARGETDURATION")?)
+        }
+        ("EXT-X-MEDIA-SEQUENCE", Some(value)) => {
+            Tag::ExtXMediaSequence(parse_value(value, "EXT-X-MEDIA-SEQUENCE")?)
+        }
+        ("EXT-X-DISCONTINUITY-SEQUENCE", Some(value)) => {
+            Tag::ExtXDiscontinuitySequence(parse_value(value, "EXT-X-DISCONTINUITY-SEQUENCE")?)
+        }
+        ("EXT-X-BITRATE", Some(value)) => Tag::ExtXBitrate(parse_value(value, "EXT-X-BITRATE")?),
+        ("EXT-X-PLAYLIST-TYPE", Some(value @ ("EVENT" | "VOD"))) => {
+            Tag::ExtXPlaylistType(value.to_string())
+        }
+        ("EXT-X-PLAYLIST-TYPE", Some(value)) => {
+            return Err(invalid_value("EXT-X-PLAYLIST-TYPE", value))
+        }
+        ("EXT-X-ALLOW-CACHE", Some("YES")) => Tag::ExtXAllowCache(true),
+        ("EXT-X-ALLOW-CACHE", Some("NO")) => Tag::ExtXAllowCache(false),
+        ("EXT-X-ALLOW-CACHE", Some(value)) => {
+            return Err(invalid_value("EXT-X-ALLOW-CACHE", value))
+        }
+        ("EXT-X-PROGRAM-DATE-TIME", Some(value)) => {
+            Tag::ExtXProgramDateTime(non_empty(value, "EXT-X-PROGRAM-DATE-TIME")?)
+        }
+        ("EXT-X-BYTERANGE", Some(value)) => {
+            Tag::ExtXByteRange(non_empty(value, "EXT-X-BYTERANGE")?)
+        }
+        ("EXT-X-DEFINE", Some(value)) => {
+            attributes()?;
+            Tag::ExtXDefine(value.to_string())
+        }
+        ("EXT-X-KEY", Some(_)) => Tag::ExtXKey(parse_key(&attributes()?, "EXT-X-KEY")?),
+        ("EXT-X-SESSION-KEY", Some(_)) => {
+            Tag::ExtXSessionKey(parse_key(&attributes()?, "EXT-X-SESSION-KEY")?)
+        }
+        ("EXT-X-MAP", Some(_)) => parse_map(&attributes()?)?,
+        ("EXT-X-DATERANGE", Some(_)) => parse_date_range(attributes()?)?,
+        ("EXT-X-START", Some(_)) => parse_start(&attributes()?)?,
+        ("EXT-X-STREAM-INF", Some(_)) => parse_stream_inf(&attributes()?)?,
+        ("EXT-X-I-FRAME-STREAM-INF", Some(_)) => parse_i_frame_stream_inf(&attributes()?)?,
+        ("EXT-X-MEDIA", Some(_)) => parse_media(&attributes()?)?,
+        ("EXT-X-SESSION-DATA", Some(_)) => parse_session_data(&attributes()?)?,
+        ("EXT-X-SERVER-CONTROL", Some(_)) => parse_server_control(&attributes()?)?,
+        ("EXT-X-PART-INF", Some(_)) => Tag::ExtXPartInf {
+            part_target_duration: required_number(&attributes()?, "PART-TARGET", "EXT-X-PART-INF")?,
+        },
+        ("EXT-X-PART", Some(_)) => parse_part(&attributes()?)?,
+        ("EXT-X-SKIP", Some(_)) => parse_skip(&attributes()?)?,
+        ("EXT-X-PRELOAD-HINT", Some(_)) => parse_preload_hint(&attributes()?)?,
+        ("EXT-X-RENDITION-REPORT", Some(_)) => parse_rendition_report(&attributes()?)?,
+        _ => return Ok(None),
+    };
+
+    Ok(Some(tag))
+}
+
+fn invalid_value(tag: &'static str, value: &str) -> SyntaxError {
+    SyntaxError::InvalidTagValue {
+        tag,
+        value: value.to_string(),
+    }
+}
+
+fn parse_value<T: std::str::FromStr>(value: &str, tag: &'static str) -> Result<T, SyntaxError> {
+    value.parse().map_err(|_| invalid_value(tag, value))
+}
+
+fn non_empty(value: &str, tag: &'static str) -> Result<String, SyntaxError> {
+    if value.is_empty() {
+        Err(invalid_value(tag, value))
+    } else {
+        Ok(value.to_string())
+    }
+}
+
+fn parse_key(attributes: &[Attribute], tag: &'static str) -> Result<Key, SyntaxError> {
+    Ok(Key {
+        method: required_string(attributes, "METHOD", tag)?,
+        uri: optional_string(attributes, "URI"),
+        iv: optional_string(attributes, "IV"),
+        keyformat: optional_string(attributes, "KEYFORMAT"),
+        keyformatversions: optional_string(attributes, "KEYFORMATVERSIONS"),
+    })
+}
+
+fn parse_map(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    Ok(Tag::ExtXMap(Map {
+        uri: required_string(attributes, "URI", "EXT-X-MAP")?,
+        byterange: optional_string(attributes, "BYTERANGE").filter(|value| !value.is_empty()),
+    }))
+}
+
+fn parse_date_range(attributes: Vec<Attribute>) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-DATERANGE";
+    let mut id = None;
+    let mut class = None;
+    let mut start_date = None;
+    let mut cue = None;
+    let mut end_date = None;
+    let mut duration = None;
+    let mut planned_duration = None;
+    let mut end_on_next = None;
+    let mut scte35_cmd = None;
+    let mut scte35_out = None;
+    let mut scte35_in = None;
+    let mut extra_attributes = Vec::new();
+
+    for attribute in attributes {
+        let value = attribute.value.clone();
+        match attribute.name.as_str() {
+            "ID" => id = Some(value),
+            "CLASS" => class = Some(value),
+            "START-DATE" => start_date = Some(value),
+            "CUE" => cue = Some(value),
+            "END-DATE" => end_date = Some(value),
+            "DURATION" => duration = Some(parse_attribute_value(&value, TAG, "DURATION")?),
+            "PLANNED-DURATION" => {
+                planned_duration = Some(parse_attribute_value(&value, TAG, "PLANNED-DURATION")?)
+            }
+            "END-ON-NEXT" => {
+                end_on_next = Some(match value.as_str() {
+                    "YES" => true,
+                    "NO" => false,
+                    _ => {
+                        return Err(SyntaxError::InvalidAttributeValue {
+                            tag: TAG,
+                            attribute: "END-ON-NEXT",
+                            value,
+                        })
+                    }
+                })
+            }
+            "SCTE35-CMD" => scte35_cmd = Some(value),
+            "SCTE35-OUT" => scte35_out = Some(value),
+            "SCTE35-IN" => scte35_in = Some(value),
+            // X- client attributes and attributes from newer revisions of the
+            // spec are preserved as written so they round-trip.
+            _ => extra_attributes.push((attribute.name.clone(), attribute.into_value())),
+        }
+    }
+
+    Ok(Tag::ExtXDateRange {
+        id: id.ok_or(SyntaxError::MissingAttribute {
+            tag: TAG,
+            attribute: "ID",
+        })?,
+        class,
+        start_date: start_date.ok_or(SyntaxError::MissingAttribute {
+            tag: TAG,
+            attribute: "START-DATE",
+        })?,
+        cue,
+        end_date,
+        duration,
+        planned_duration,
+        end_on_next,
+        scte35_cmd,
+        scte35_out,
+        scte35_in,
+        extra_attributes,
+    })
+}
+
+fn parse_attribute_value<T: std::str::FromStr>(
+    value: &str,
+    tag: &'static str,
+    attribute: &'static str,
+) -> Result<T, SyntaxError> {
+    value
+        .parse()
+        .map_err(|_| SyntaxError::InvalidAttributeValue {
+            tag,
+            attribute,
+            value: value.to_string(),
+        })
+}
+
+fn parse_start(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    Ok(Tag::ExtXStart {
+        time_offset: required_string(attributes, "TIME-OFFSET", "EXT-X-START")?,
+        precise: optional_boolean(attributes, "PRECISE", "EXT-X-START")?,
+    })
+}
+
+fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-STREAM-INF";
+    Ok(Tag::ExtXStreamInf {
+        bandwidth: required_number(attributes, "BANDWIDTH", TAG)?,
+        average_bandwidth: optional_number(attributes, "AVERAGE-BANDWIDTH", TAG)?,
+        codecs: optional_string(attributes, "CODECS"),
+        resolution: optional_string(attributes, "RESOLUTION"),
+        frame_rate: optional_number(attributes, "FRAME-RATE", TAG)?,
+        audio: optional_string(attributes, "AUDIO"),
+        video: optional_string(attributes, "VIDEO"),
+        subtitle: optional_string(attributes, "SUBTITLES"),
+        closed_captions: optional_string(attributes, "CLOSED-CAPTIONS"),
+    })
+}
+
+fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-I-FRAME-STREAM-INF";
+    Ok(Tag::ExtXIFrameStreamInf {
+        bandwidth: required_number(attributes, "BANDWIDTH", TAG)?,
+        average_bandwidth: optional_number(attributes, "AVERAGE-BANDWIDTH", TAG)?,
+        codecs: optional_string(attributes, "CODECS"),
+        resolution: optional_string(attributes, "RESOLUTION"),
+        frame_rate: optional_number(attributes, "FRAME-RATE", TAG)?,
+        uri: required_string(attributes, "URI", TAG)?,
+    })
+}
+
+fn parse_media(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-MEDIA";
+    Ok(Tag::ExtXMedia {
+        type_: required_string(attributes, "TYPE", TAG)?,
+        group_id: required_string(attributes, "GROUP-ID", TAG)?,
+        name: Some(required_string(attributes, "NAME", TAG)?),
+        uri: optional_string(attributes, "URI"),
+        default: optional_boolean(attributes, "DEFAULT", TAG)?,
+        autoselect: optional_boolean(attributes, "AUTOSELECT", TAG)?,
+        characteristics: optional_string(attributes, "CHARACTERISTICS"),
+        language: optional_string(attributes, "LANGUAGE"),
+        instream_id: optional_string(attributes, "INSTREAM-ID"),
+        language_codec: optional_string(attributes, "LANGUAGE-CODEC"),
+        forced: optional_boolean(attributes, "FORCED", TAG)?,
+        channels: optional_string(attributes, "CHANNELS"),
+    })
+}
+
+fn parse_session_data(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-SESSION-DATA";
+    let id = required_string(attributes, "DATA-ID", TAG)?;
+    let value = optional_string(attributes, "VALUE");
+    let uri = optional_string(attributes, "URI");
+    if value.is_some() == uri.is_some() {
+        return Err(SyntaxError::ConflictingAttributes {
+            tag: TAG,
+            reason: "exactly one of VALUE or URI is required",
+        });
+    }
+    Ok(Tag::ExtXSessionData {
+        id,
+        value,
+        uri,
+        language: optional_string(attributes, "LANGUAGE"),
+    })
+}
+
+fn parse_server_control(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-SERVER-CONTROL";
+    Ok(Tag::ExtXServerControl {
+        can_skip_until: optional_number(attributes, "CAN-SKIP-UNTIL", TAG)?,
+        can_skip_dateranges: optional_boolean(attributes, "CAN-SKIP-DATERANGES", TAG)?,
+        hold_back: optional_number(attributes, "HOLD-BACK", TAG)?,
+        part_hold_back: optional_number(attributes, "PART-HOLD-BACK", TAG)?,
+        can_block_reload: optional_boolean(attributes, "CAN-BLOCK-RELOAD", TAG)?,
+    })
+}
+
+fn parse_part(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-PART";
+    Ok(Tag::ExtXPart {
+        uri: required_string(attributes, "URI", TAG)?,
+        duration: required_number(attributes, "DURATION", TAG)?,
+        independent: optional_boolean(attributes, "INDEPENDENT", TAG)?,
+        byterange: optional_string(attributes, "BYTERANGE"),
+        gap: optional_boolean(attributes, "GAP", TAG)?,
+    })
+}
+
+fn parse_skip(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    Ok(Tag::ExtXSkip {
+        skipped_segments: required_number(attributes, "SKIPPED-SEGMENTS", "EXT-X-SKIP")?,
+        recently_removed_dateranges: optional_string(attributes, "RECENTLY-REMOVED-DATERANGES"),
+    })
+}
+
+fn parse_preload_hint(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-PRELOAD-HINT";
+    Ok(Tag::ExtXPreloadHint {
+        type_: required_string(attributes, "TYPE", TAG)?,
+        uri: required_string(attributes, "URI", TAG)?,
+        byterange_start: optional_number(attributes, "BYTERANGE-START", TAG)?,
+        byterange_length: optional_number(attributes, "BYTERANGE-LENGTH", TAG)?,
+    })
+}
+
+fn parse_rendition_report(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-RENDITION-REPORT";
+    Ok(Tag::ExtXRenditionReport {
+        uri: required_string(attributes, "URI", TAG)?,
+        last_msn: optional_number(attributes, "LAST-MSN", TAG)?,
+        last_part: optional_number(attributes, "LAST-PART", TAG)?,
+    })
+}
+
+fn validate_key(key: &Key, tag: &str, errors: &mut Vec<ValidationError>) {
+    match key.method.as_str() {
+        "NONE" => {
+            if key.uri.is_some()
+                || key.iv.is_some()
+                || key.keyformat.is_some()
+                || key.keyformatversions.is_some()
+            {
+                errors.push(ValidationError::InvalidKeyAttributes(format!(
+                    "{tag} METHOD=NONE must not include URI, IV, KEYFORMAT, or KEYFORMATVERSIONS"
+                )));
+            }
+        }
+        "AES-128" | "SAMPLE-AES" => {
+            if key.uri.as_deref().is_none_or(str::is_empty) {
+                errors.push(ValidationError::InvalidKeyAttributes(format!(
+                    "{tag} encryption methods require URI"
+                )));
+            }
+        }
+        _ => errors.push(ValidationError::InvalidKeyMethod(key.method.clone())),
     }
 }
 
@@ -929,7 +823,7 @@ fn is_master_tag(tag: &Tag) -> bool {
             | Tag::ExtXStreamInf { .. }
             | Tag::ExtXIFrameStreamInf { .. }
             | Tag::ExtXSessionData { .. }
-            | Tag::ExtXSessionKey { .. }
+            | Tag::ExtXSessionKey(_)
     )
 }
 
@@ -941,8 +835,8 @@ fn is_media_segment_tag(tag: &Tag) -> bool {
             | Tag::ExtXDiscontinuitySequence(_)
             | Tag::ExtXEndList
             | Tag::ExtInf(..)
-            | Tag::ExtXKey { .. }
-            | Tag::ExtXMap { .. }
+            | Tag::ExtXKey(_)
+            | Tag::ExtXMap(_)
             | Tag::ExtXProgramDateTime(_)
             | Tag::ExtXByteRange(_)
             | Tag::ExtXDateRange { .. }
@@ -951,45 +845,68 @@ fn is_media_segment_tag(tag: &Tag) -> bool {
     )
 }
 
-fn minimum_version(tag: &Tag) -> Option<u8> {
+/// The lowest EXT-X-VERSION that permits `tag`, per section 8 of
+/// draft-pantos-hls-rfc8216bis.
+fn minimum_version(tag: &Tag, has_i_frames_only: bool) -> Option<u8> {
     match tag {
+        Tag::ExtXKey(key) | Tag::ExtXSessionKey(key) => {
+            if key.method == "SAMPLE-AES"
+                || key.keyformat.is_some()
+                || key.keyformatversions.is_some()
+            {
+                Some(5)
+            } else if key.iv.is_some() {
+                Some(2)
+            } else {
+                None
+            }
+        }
+        Tag::ExtInf(_, duration, _) if duration.fract() != 0.0 => Some(3),
         Tag::ExtXByteRange(_) | Tag::ExtXIFramesOnly => Some(4),
-        Tag::ExtXMap { .. }
-        | Tag::ExtXKey {
-            keyformat: Some(_), ..
-        }
-        | Tag::ExtXSessionKey {
-            keyformat: Some(_), ..
-        } => Some(5),
-        Tag::ExtXDateRange { .. }
-        | Tag::ExtXStart { .. }
-        | Tag::ExtXIndependentSegments
-        | Tag::ExtXMedia { .. }
-        | Tag::ExtXStreamInf {
-            average_bandwidth: Some(_),
+        Tag::ExtXMap(_) if has_i_frames_only => Some(5),
+        Tag::ExtXMap(_) => Some(6),
+        Tag::ExtXMedia {
+            instream_id: Some(instream_id),
             ..
+        } if instream_id.starts_with("SERVICE") => Some(7),
+        Tag::ExtXDefine(value) => {
+            let has_query_param = parse_attribute_list(value)
+                .is_ok_and(|attributes| attributes.iter().any(|a| a.name == "QUERYPARAM"));
+            Some(if has_query_param { 11 } else { 8 })
         }
-        | Tag::ExtXIFrameStreamInf {
-            average_bandwidth: Some(_),
+        Tag::ExtXSkip {
+            recently_removed_dateranges: Some(_),
             ..
-        } => Some(6),
+        } => Some(10),
+        Tag::ExtXSkip { .. } => Some(9),
+        Tag::ExtXDateRange {
+            extra_attributes, ..
+        } if extra_attributes
+            .iter()
+            .any(|(name, _)| name.starts_with("REQ-")) =>
+        {
+            Some(12)
+        }
         _ => None,
     }
 }
 
 fn tag_name(tag: &Tag) -> &'static str {
     match tag {
+        Tag::ExtInf(..) => "EXTINF",
         Tag::ExtXByteRange(_) => "EXT-X-BYTERANGE",
         Tag::ExtXIFramesOnly => "EXT-X-I-FRAMES-ONLY",
-        Tag::ExtXMap { .. } => "EXT-X-MAP",
-        Tag::ExtXKey { .. } => "EXT-X-KEY",
-        Tag::ExtXSessionKey { .. } => "EXT-X-SESSION-KEY",
+        Tag::ExtXMap(_) => "EXT-X-MAP",
+        Tag::ExtXKey(_) => "EXT-X-KEY",
+        Tag::ExtXSessionKey(_) => "EXT-X-SESSION-KEY",
         Tag::ExtXDateRange { .. } => "EXT-X-DATERANGE",
         Tag::ExtXStart { .. } => "EXT-X-START",
         Tag::ExtXIndependentSegments => "EXT-X-INDEPENDENT-SEGMENTS",
         Tag::ExtXMedia { .. } => "EXT-X-MEDIA",
         Tag::ExtXStreamInf { .. } => "EXT-X-STREAM-INF",
         Tag::ExtXIFrameStreamInf { .. } => "EXT-X-I-FRAME-STREAM-INF",
+        Tag::ExtXDefine(_) => "EXT-X-DEFINE",
+        Tag::ExtXSkip { .. } => "EXT-X-SKIP",
         _ => "tag",
     }
 }

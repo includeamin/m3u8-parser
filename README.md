@@ -14,17 +14,21 @@ by [RFC 8216](https://tools.ietf.org/html/rfc8216).
 
 - Parse M3U8 playlists from strings, files, or readers
 - Generate M3U8 playlists and write them to strings, files, or writers
-- Derive `MediaSegment` values from a playlist with the effective `KEY`, `MAP`,
-  `BYTERANGE`, `GAP`, and `PROGRAM-DATE-TIME` state for each `EXTINF` segment.
+- Derive `MediaSegment` values from a playlist with the media sequence number,
+  discontinuity flag, and effective `KEY`, `MAP`, `BYTERANGE`, `GAP`, and
+  `PROGRAM-DATE-TIME` state for each `EXTINF` segment.
 - Parses, models, and serializes every RFC 8216 tag family listed below. Standard
-    tags use order-independent attribute parsing and unsupported extension tags are
-    preserved for round-tripping.
+  tags use order-independent attribute parsing, and unsupported extension tags and
+  unknown `EXT-X-DATERANGE` attributes are preserved for round-tripping.
+- Typed parse errors (`ParseError`) carrying the 1-based line number and a
+  matchable `SyntaxError` kind.
 - RFC 8216 semantic validation enforces `EXTM3U` placement, singleton tags,
-    Master/Media Playlist separation, `EXT-X-STREAM-INF` URI pairing, required
-  media target durations, RFC target-duration rounding, tag version gates,
-  encryption key attribute combinations, `END-ON-NEXT` date-range constraints,
-  and Master Playlist rendition-group references. Validation still does not
-  enforce every cross-tag constraint defined by the RFC.
+  Master/Media Playlist separation, `EXT-X-STREAM-INF` URI pairing, required
+  media target durations, RFC target-duration rounding, tag version gates
+  (versions 1 through 12), encryption and session key attribute combinations,
+  `CLOSED-CAPTIONS` rendition rules, `END-ON-NEXT` date-range constraints, and
+  Master Playlist rendition-group references. Validation still does not enforce
+  every cross-tag constraint defined by the RFC.
 - RFC 8216 tag coverage:
     - **Basic Tags**:
         - `#EXTM3U`
@@ -54,8 +58,8 @@ by [RFC 8216](https://tools.ietf.org/html/rfc8216).
         - `#EXT-X-INDEPENDENT-SEGMENTS`
         - `#EXT-X-START`
         - `#EXT-X-DEFINE`
-- Additional non-RFC low-latency and draft extension tags represented by this crate include
-    `#EXT-X-PART`, `#EXT-X-PART-INF`, `#EXT-X-PRELOAD-HINT`,
+- Low-latency and draft extension tags from draft-pantos-hls-rfc8216bis:
+  `#EXT-X-PART`, `#EXT-X-PART-INF`, `#EXT-X-PRELOAD-HINT`,
   `#EXT-X-RENDITION-REPORT`, `#EXT-X-SERVER-CONTROL`, `#EXT-X-SKIP`, and
   `#EXT-X-BITRATE`.
 
@@ -65,7 +69,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-m3u8-parser = "0.6.1"
+m3u8-parser = "0.7.0"
 ```
 
 ## Usage
@@ -76,22 +80,43 @@ m3u8-parser = "0.6.1"
 use m3u8_parser::m3u8::playlist::Playlist;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let data = r#"
-    #EXTM3U
-    #EXT-X-VERSION:7
-    #EXT-X-TARGETDURATION:6
-    #EXTINF:5.009,
-    https://media.example.com/first.ts
-    #EXTINF:5.009,
-    https://media.example.com/second.ts
-    #EXTINF:3.003,
-    https://media.example.com/third.ts
-    #EXT-X-ENDLIST
-    "#;
+    let data = r#"
+#EXTM3U
+#EXT-X-VERSION:7
+#EXT-X-TARGETDURATION:6
+#EXTINF:5.009,
+https://media.example.com/first.ts
+#EXTINF:5.009,
+https://media.example.com/second.ts
+#EXTINF:3.003,
+https://media.example.com/third.ts
+#EXT-X-ENDLIST
+"#;
 
-  let playlist = Playlist::from_reader(data.as_bytes())?;
-  println!("{:?}", playlist);
-  Ok(())
+    let playlist = Playlist::from_reader(data.as_bytes())?;
+    if let Err(errors) = playlist.validate() {
+        eprintln!("playlist is not RFC 8216 compliant: {errors:?}");
+    }
+    for segment in playlist.media_segments() {
+        println!("#{} {} ({}s)", segment.sequence, segment.uri, segment.duration);
+    }
+    Ok(())
+}
+```
+
+Parse failures are reported as `ParseError`, which carries the line number and
+a matchable `SyntaxError`:
+
+```rust
+use m3u8_parser::m3u8::error::{ParseError, SyntaxError};
+use m3u8_parser::m3u8::playlist::Playlist;
+
+let data = "#EXTM3U\n#EXTINF:6.0,\n";
+match Playlist::from_reader(data.as_bytes()) {
+    Err(ParseError::Syntax { line, kind: SyntaxError::MissingUriAfterExtInf }) => {
+        eprintln!("EXTINF on line {line} has no URI");
+    }
+    other => println!("{other:?}"),
 }
 ```
 
@@ -101,18 +126,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 use m3u8_parser::m3u8::playlist::builder::PlaylistBuilder;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let playlist = PlaylistBuilder::new()
-          .extm3u()
-          .version(7)
-          .target_duration(6)
-      .extinf("https://media.example.com/first.ts", 5.009, None)
-      .extinf("https://media.example.com/second.ts", 5.009, None)
-      .extinf("https://media.example.com/third.ts", 3.003, None)
-          .end_list()
-          .build()?;
+    let playlist = PlaylistBuilder::new()
+        .extm3u()
+        .version(7)
+        .target_duration(6)
+        .extinf("https://media.example.com/first.ts", 5.009, None)
+        .extinf("https://media.example.com/second.ts", 5.009, None)
+        .extinf("https://media.example.com/third.ts", 3.003, None)
+        .end_list()
+        .build()
+        .map_err(|errors| format!("invalid playlist: {errors:?}"))?;
 
-  playlist.write_to_file("playlist.m3u8")?;
-  Ok(())
+    playlist.write_to_file("playlist.m3u8")?;
+    Ok(())
 }
 ```
 

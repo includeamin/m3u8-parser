@@ -4,6 +4,7 @@
 /// of a playlist to the M3U8 specification. Each variant represents a distinct error, providing
 /// context for what went wrong during validation.
 #[derive(Debug, PartialEq)]
+#[non_exhaustive]
 pub enum ValidationError {
     /// Error indicating that the #EXTM3U tag is missing from the playlist.
     MissingExtM3U,
@@ -28,7 +29,8 @@ pub enum ValidationError {
     /// Error indicating that a media segment exceeds EXT-X-TARGETDURATION.
     SegmentDurationExceedsTarget { duration: f32, target_duration: u64 },
 
-    /// Error indicating that the specified version is invalid.
+    /// Error indicating that the specified version is outside 1 through 12,
+    /// the versions defined by draft-pantos-hls-rfc8216bis.
     ///
     /// # Arguments
     ///
@@ -92,6 +94,9 @@ pub enum ValidationError {
     /// Error indicating that a media tag is missing required fields.
     MissingMediaFields,
 
+    /// Error indicating that EXT-X-MEDIA attributes are inconsistent with its TYPE.
+    InvalidMediaAttributes(String),
+
     /// Error indicating that a stream information tag is invalid.
     ///
     /// # Arguments
@@ -124,20 +129,6 @@ pub enum ValidationError {
 
     /// Error indicating that the specified start time offset is invalid.
     InvalidStartTimeOffset,
-
-    /// Error indicating that a skip tag is invalid.
-    ///
-    /// # Arguments
-    ///
-    /// * `String` - The invalid skip tag information encountered.
-    InvalidSkipTag(String),
-
-    /// Error indicating that the specified bitrate is invalid.
-    ///
-    /// # Arguments
-    ///
-    /// * `u32` - The invalid bitrate value that was encountered.
-    InvalidBitrate(u32),
 
     /// Error indicating that the specified start offset is invalid.
     InvalidStartOffset,
