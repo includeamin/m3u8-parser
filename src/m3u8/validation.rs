@@ -84,51 +84,17 @@ pub enum ValidationError {
     /// Error indicating incompatible EXT-X-DATERANGE attributes.
     InvalidDateRangeAttributes(String),
 
-    /// Error indicating that the specified byte range is invalid.
-    ///
-    /// # Arguments
-    ///
-    /// * `String` - The invalid byte range that was encountered.
-    InvalidByteRange(String),
-
     /// Error indicating that a media tag is missing required fields.
     MissingMediaFields,
 
     /// Error indicating that EXT-X-MEDIA attributes are inconsistent with its TYPE.
     InvalidMediaAttributes(String),
 
-    /// Error indicating that a stream information tag is invalid.
-    ///
-    /// # Arguments
-    ///
-    /// * `String` - The invalid stream information encountered.
-    InvalidStreamInf(String),
-
-    /// Error indicating that an I-frame stream information tag is invalid.
-    ///
-    /// # Arguments
-    ///
-    /// * `String` - The invalid I-frame stream information encountered.
-    InvalidIFrameStreamInf(String),
-
-    /// Error indicating that a part tag is invalid.
-    ///
-    /// # Arguments
-    ///
-    /// * `String` - The invalid part information encountered.
-    InvalidPartInfo(String),
-
     /// Error indicating that a preload hint URI is invalid.
     InvalidPreloadHintUri,
 
     /// Error indicating that a rendition report URI is invalid.
     InvalidRenditionReportUri,
-
-    /// Error indicating that the server control information is invalid.
-    InvalidServerControl,
-
-    /// Error indicating that the specified start time offset is invalid.
-    InvalidStartTimeOffset,
 
     /// Error indicating that the specified start offset is invalid.
     InvalidStartOffset,

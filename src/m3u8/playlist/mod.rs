@@ -14,8 +14,12 @@
 //!     .expect("Failed to read playlist");
 //!
 //! playlist.validate().expect("Playlist is invalid");
-//! playlist.write_to_file("src/m3u8/tests/test_data/out.m3u8")
+//! playlist.write_to_file(std::env::temp_dir().join("m3u8-parser-doc-out.m3u8"))
 //!     .expect("Failed to write playlist");
+//!
+//! // Playlists also parse from and serialize to strings.
+//! let text = playlist.to_string();
+//! assert_eq!(text.parse::<Playlist>().unwrap(), playlist);
 //! ```
 //!
 //! ## Structs
@@ -27,7 +31,9 @@
 //!
 //! - `from_reader<R: Read>(reader: R) -> Result<Self, ParseError>`: Creates a new `Playlist` by reading tags from a reader.
 //! - `from_file<P: AsRef<Path>>(path: P) -> Result<Self, ParseError>`: Creates a new `Playlist` by reading tags from a specified file.
+//! - `write_to<W: Write>(&self, writer: W) -> io::Result<()>`: Writes the playlist to any writer.
 //! - `write_to_file<P: AsRef<Path>>(&self, path: P) -> io::Result<()>`: Writes the playlist to a specified file.
+//! - `Display` and `FromStr` convert a playlist to and from a string.
 //! - `media_segments(&self) -> Vec<MediaSegment>`: Returns the media segments with their effective state.
 //! - `validate(&self) -> Result<(), Vec<ValidationError>>`: Validates the playlist according to RFC 8216, returning any validation errors.
 
@@ -41,7 +47,7 @@ use crate::m3u8::parser::{
 use crate::m3u8::tags::{Key, Map, Tag};
 use crate::m3u8::validation::ValidationError;
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 
 /// The highest EXT-X-VERSION defined by the HLS specification (draft-pantos-hls-rfc8216bis).
@@ -71,6 +77,23 @@ pub struct MediaSegment {
     pub byterange: Option<String>,
     pub program_date_time: Option<String>,
     pub gap: bool,
+}
+
+impl std::fmt::Display for Playlist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for tag in &self.tags {
+            writeln!(f, "{tag}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::str::FromStr for Playlist {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_reader(s.as_bytes())
+    }
 }
 
 impl Playlist {
@@ -137,13 +160,15 @@ impl Playlist {
         Self::from_reader(File::open(path)?)
     }
 
+    /// Writes the playlist to a writer, one tag per line.
+    pub fn write_to<W: Write>(&self, mut writer: W) -> io::Result<()> {
+        write!(writer, "{self}")?;
+        writer.flush()
+    }
+
     /// Writes the playlist to a file.
     pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
-        let mut file = File::create(path)?;
-        for tag in &self.tags {
-            writeln!(file, "{}", tag)?;
-        }
-        Ok(())
+        self.write_to(BufWriter::new(File::create(path)?))
     }
 
     /// Returns media segments with effective state from preceding tags.

@@ -1864,4 +1864,16 @@ third.ts
             ])
         );
     }
+
+    #[test]
+    fn test_playlist_writes_to_strings_and_writers() {
+        let data = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXTINF:9.5,first\nfirst.ts\n#EXT-X-ENDLIST\n";
+        let playlist: Playlist = data.parse().unwrap();
+
+        assert_eq!(playlist.to_string(), data);
+
+        let mut buffer = Vec::new();
+        playlist.write_to(&mut buffer).unwrap();
+        assert_eq!(String::from_utf8(buffer).unwrap(), data);
+    }
 }
