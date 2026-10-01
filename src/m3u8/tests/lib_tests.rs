@@ -1,10 +1,11 @@
 #[cfg(test)]
 mod tests {
-    use crate::m3u8::error::{ParseError, SyntaxError};
+    use crate::m3u8::error::{ParseError, SubstitutionError, SyntaxError};
     use crate::m3u8::playlist::builder::PlaylistBuilder;
     use crate::m3u8::playlist::Playlist;
     use crate::m3u8::tags::{AttributeValue, ByteRange, Key, Map, Tag};
     use crate::m3u8::validation::ValidationError;
+    use std::collections::HashMap;
     use std::io::Write;
 
     fn syntax_error(data: &str) -> (usize, SyntaxError) {
@@ -2163,5 +2164,99 @@ seg2.mp4
             with_version.build().unwrap().tags,
             vec![Tag::ExtM3U, Tag::ExtXVersion(3)]
         );
+    }
+
+    #[test]
+    fn test_validate_flags_allow_cache_from_version_7() {
+        let playlist = |version| Playlist {
+            tags: vec![
+                Tag::ExtM3U,
+                Tag::ExtXVersion(version),
+                Tag::ExtXTargetDuration(10),
+                Tag::ExtXAllowCache(true),
+            ],
+        };
+
+        assert_eq!(playlist(6).validate(), Ok(()));
+        assert_eq!(
+            playlist(7).validate(),
+            Err(vec![ValidationError::RemovedTag {
+                tag: "EXT-X-ALLOW-CACHE".to_string(),
+                removed_in: 7,
+            }])
+        );
+    }
+
+    #[test]
+    fn test_substitute_variables_from_value_import_and_query() {
+        let data = "#EXTM3U
+#EXT-X-VERSION:11
+#EXT-X-TARGETDURATION:4
+#EXT-X-DEFINE:NAME=\"base\",VALUE=\"https://cdn.example.com\"
+#EXT-X-DEFINE:IMPORT=\"session\"
+#EXT-X-DEFINE:QUERYPARAM=\"token\"
+#EXT-X-MAP:URI=\"{$base}/init.mp4\"
+#EXTINF:4,
+{$base}/seg.mp4?s={$session}&t={$token}
+";
+        let playlist = Playlist::from_reader(data.as_bytes()).unwrap();
+        let imports = HashMap::from([("session".to_string(), "abc".to_string())]);
+
+        let resolved = playlist
+            .substitute_variables(&imports, Some("x=1&token=a%2Fb"))
+            .unwrap();
+
+        assert_eq!(
+            resolved.tags[6],
+            Tag::ExtXMap(Map {
+                uri: "https://cdn.example.com/init.mp4".to_string(),
+                byterange: None,
+            })
+        );
+        assert_eq!(
+            resolved.media_segments()[0].uri,
+            "https://cdn.example.com/seg.mp4?s=abc&t=a/b"
+        );
+        assert_eq!(resolved.tags[3], playlist.tags[3]);
+        assert_eq!(playlist.to_string(), data);
+    }
+
+    #[test]
+    fn test_substitute_variables_errors() {
+        let substitute = |data: &str, imports: &[(&str, &str)], query: Option<&str>| {
+            let imports = imports
+                .iter()
+                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .collect::<HashMap<_, _>>();
+            Playlist::from_reader(data.as_bytes())
+                .unwrap()
+                .substitute_variables(&imports, query)
+                .unwrap_err()
+        };
+
+        assert!(matches!(
+            substitute("#EXTM3U\n{$nope}/a.m3u8\n", &[], None),
+            SubstitutionError::UndefinedVariable(name) if name == "nope"
+        ));
+        assert!(matches!(
+            substitute("#EXTM3U\n#EXT-X-DEFINE:IMPORT=\"x\"\n", &[], None),
+            SubstitutionError::MissingImport(name) if name == "x"
+        ));
+        assert!(matches!(
+            substitute("#EXTM3U\n#EXT-X-DEFINE:QUERYPARAM=\"t\"\n", &[], Some("u=1")),
+            SubstitutionError::MissingQueryParameter(name) if name == "t"
+        ));
+        assert!(matches!(
+            substitute(
+                "#EXTM3U\n#EXT-X-DEFINE:NAME=\"a\",VALUE=\"1\"\n#EXT-X-DEFINE:NAME=\"a\",VALUE=\"2\"\n",
+                &[],
+                None
+            ),
+            SubstitutionError::DuplicateVariable(name) if name == "a"
+        ));
+        assert!(matches!(
+            substitute("#EXTM3U\n#EXT-X-DEFINE:NAME=\"a\"\n", &[], None),
+            SubstitutionError::InvalidDefine(_)
+        ));
     }
 }

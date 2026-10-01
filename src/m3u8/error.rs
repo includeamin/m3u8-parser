@@ -59,6 +59,53 @@ impl From<io::Error> for ParseError {
     }
 }
 
+/// An error encountered while substituting EXT-X-DEFINE variables.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum SubstitutionError {
+    /// A `{$name}` reference has no definition.
+    UndefinedVariable(String),
+    /// An `IMPORT` names a variable missing from the imported variables.
+    MissingImport(String),
+    /// A `QUERYPARAM` names a parameter missing from the playlist URI query.
+    MissingQueryParameter(String),
+    /// A variable is defined more than once.
+    DuplicateVariable(String),
+    /// An EXT-X-DEFINE tag does not have exactly one of `NAME`/`VALUE`,
+    /// `IMPORT`, or `QUERYPARAM`, or its name is invalid.
+    InvalidDefine(String),
+    /// The playlist could not be parsed after substitution.
+    Parse(ParseError),
+}
+
+impl fmt::Display for SubstitutionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SubstitutionError::UndefinedVariable(name) => write!(f, "undefined variable: {name}"),
+            SubstitutionError::MissingImport(name) => {
+                write!(f, "missing imported variable: {name}")
+            }
+            SubstitutionError::MissingQueryParameter(name) => {
+                write!(f, "missing query parameter: {name}")
+            }
+            SubstitutionError::DuplicateVariable(name) => {
+                write!(f, "variable defined more than once: {name}")
+            }
+            SubstitutionError::InvalidDefine(value) => write!(f, "invalid EXT-X-DEFINE: {value}"),
+            SubstitutionError::Parse(error) => write!(f, "{error}"),
+        }
+    }
+}
+
+impl std::error::Error for SubstitutionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            SubstitutionError::Parse(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
 /// The reason a playlist line could not be parsed.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]

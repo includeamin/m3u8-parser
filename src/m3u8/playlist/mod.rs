@@ -38,6 +38,7 @@
 //! - `validate(&self) -> Result<(), Vec<ValidationError>>`: Validates the playlist according to RFC 8216, returning any validation errors.
 
 pub mod builder;
+mod variables;
 
 use crate::m3u8::error::{ParseError, SyntaxError};
 use crate::m3u8::parser::{
@@ -465,6 +466,18 @@ impl Playlist {
                 _ => None,
             })
             .unwrap_or(1);
+        if version >= 7
+            && self
+                .tags
+                .iter()
+                .any(|tag| matches!(tag, Tag::ExtXAllowCache(_)))
+        {
+            errors.push(ValidationError::RemovedTag {
+                tag: "EXT-X-ALLOW-CACHE".to_string(),
+                removed_in: 7,
+            });
+        }
+
         let has_i_frames_only = self.tags.iter().any(is_i_frames_only);
         for tag in &self.tags {
             if let Some(required) = minimum_version(tag, has_i_frames_only) {

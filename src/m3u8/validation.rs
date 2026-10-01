@@ -26,6 +26,8 @@ pub enum ValidationError {
         required: u8,
         actual: u8,
     },
+    /// Error indicating that a tag was removed in the playlist's protocol version.
+    RemovedTag { tag: String, removed_in: u8 },
     /// Error indicating that a media segment exceeds EXT-X-TARGETDURATION.
     SegmentDurationExceedsTarget { duration: f64, target_duration: u64 },
 
