@@ -36,21 +36,21 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None
-                ),
+                Tag::ExtInf {
+                    uri: "https://media.example.com/first.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/second.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/third.ts".to_string(),
+                    duration: 3.003,
+                    title: None
+                },
                 Tag::ExtXEndList,
             ]
         );
@@ -231,7 +231,7 @@ segment.ts
             .all(|tag| !matches!(tag, Tag::Unknown(_))));
         assert!(matches!(
             &playlist.tags[15],
-            Tag::ExtInf(uri, duration, Some(title)) if uri == "segment.ts" && *duration == 6.0 && title == "segment"
+            Tag::ExtInf { uri, duration, title: Some(title) } if uri == "segment.ts" && *duration == 6.0 && title == "segment"
         ));
     }
 
@@ -315,9 +315,17 @@ seg2.ts
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXByteRange("75232@0".to_string()),
                 Tag::Unknown(" a comment".to_string()),
-                Tag::ExtInf("seg.ts".to_string(), 10.0, None),
+                Tag::ExtInf {
+                    uri: "seg.ts".to_string(),
+                    duration: 10.0,
+                    title: None
+                },
                 Tag::ExtXDiscontinuity,
-                Tag::ExtInf("seg2.ts".to_string(), 10.0, None),
+                Tag::ExtInf {
+                    uri: "seg2.ts".to_string(),
+                    duration: 10.0,
+                    title: None
+                },
             ]
         );
         assert_eq!(playlist.validate(), Ok(()));
@@ -345,7 +353,11 @@ seg2.ts
 
     #[test]
     fn test_write_extinf_with_title_has_no_leading_space_before_uri() {
-        let tag = Tag::ExtInf("segment.ts".to_string(), 6.0, Some("title".to_string()));
+        let tag = Tag::ExtInf {
+            uri: "segment.ts".to_string(),
+            duration: 6.0,
+            title: Some("title".to_string()),
+        };
 
         assert_eq!(tag.to_string(), "#EXTINF:6,title\nsegment.ts");
     }
@@ -452,21 +464,21 @@ second.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None,
-                ),
+                Tag::ExtInf {
+                    uri: "https://media.example.com/first.ts".to_string(),
+                    duration: 5.005,
+                    title: None,
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/second.ts".to_string(),
+                    duration: 5.005,
+                    title: None,
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/third.ts".to_string(),
+                    duration: 3.003,
+                    title: None,
+                },
                 Tag::ExtXEndList,
             ],
         };
@@ -522,21 +534,21 @@ https://media.example.com/third.ts
                     keyformat: None,
                     keyformatversions: None,
                 }),
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None
-                ),
+                Tag::ExtInf {
+                    uri: "https://media.example.com/first.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/second.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/third.ts".to_string(),
+                    duration: 3.003,
+                    title: None
+                },
                 Tag::ExtXEndList,
             ]
         );
@@ -556,21 +568,21 @@ https://media.example.com/third.ts
                     keyformat: None,
                     keyformatversions: None,
                 }),
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None,
-                ),
+                Tag::ExtInf {
+                    uri: "https://media.example.com/first.ts".to_string(),
+                    duration: 5.005,
+                    title: None,
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/second.ts".to_string(),
+                    duration: 5.005,
+                    title: None,
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/third.ts".to_string(),
+                    duration: 3.003,
+                    title: None,
+                },
                 Tag::ExtXEndList,
             ],
         };
@@ -624,21 +636,21 @@ https://media.example.com/third.ts
                     uri: "init.mp4".to_string(),
                     byterange: None,
                 }),
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None
-                ),
+                Tag::ExtInf {
+                    uri: "https://media.example.com/first.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/second.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/third.ts".to_string(),
+                    duration: 3.003,
+                    title: None
+                },
                 Tag::ExtXEndList,
             ]
         );
@@ -655,21 +667,21 @@ https://media.example.com/third.ts
                     uri: "init.mp4".to_string(),
                     byterange: None,
                 }),
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None,
-                ),
+                Tag::ExtInf {
+                    uri: "https://media.example.com/first.ts".to_string(),
+                    duration: 5.005,
+                    title: None,
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/second.ts".to_string(),
+                    duration: 5.005,
+                    title: None,
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/third.ts".to_string(),
+                    duration: 3.003,
+                    title: None,
+                },
                 Tag::ExtXEndList,
             ],
         };
@@ -720,21 +732,21 @@ https://media.example.com/third.ts
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None
-                ),
+                Tag::ExtInf {
+                    uri: "https://media.example.com/first.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/second.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/third.ts".to_string(),
+                    duration: 3.003,
+                    title: None
+                },
                 Tag::ExtXEndList,
             ]
         );
@@ -748,21 +760,21 @@ https://media.example.com/third.ts
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None,
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None,
-                ),
+                Tag::ExtInf {
+                    uri: "https://media.example.com/first.ts".to_string(),
+                    duration: 5.005,
+                    title: None,
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/second.ts".to_string(),
+                    duration: 5.005,
+                    title: None,
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/third.ts".to_string(),
+                    duration: 3.003,
+                    title: None,
+                },
                 Tag::ExtXEndList,
             ],
         };
@@ -868,21 +880,21 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtInf(
-                    "https://media.example.com/first.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/second.ts".to_string(),
-                    5.005,
-                    None
-                ),
-                Tag::ExtInf(
-                    "https://media.example.com/third.ts".to_string(),
-                    3.003,
-                    None
-                ),
+                Tag::ExtInf {
+                    uri: "https://media.example.com/first.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/second.ts".to_string(),
+                    duration: 5.005,
+                    title: None
+                },
+                Tag::ExtInf {
+                    uri: "https://media.example.com/third.ts".to_string(),
+                    duration: 3.003,
+                    title: None
+                },
                 Tag::ExtXEndList,
             ]
         );
@@ -1092,7 +1104,11 @@ https://media.example.com/third.ts
                 },
                 Tag::Uri("variant.m3u8".to_string()),
                 Tag::ExtXTargetDuration(6),
-                Tag::ExtInf("segment.ts".to_string(), 6.0, None),
+                Tag::ExtInf {
+                    uri: "segment.ts".to_string(),
+                    duration: 6.0,
+                    title: None,
+                },
             ],
         };
 
@@ -1153,7 +1169,11 @@ https://media.example.com/third.ts
         let playlist = Playlist {
             tags: vec![
                 Tag::ExtM3U,
-                Tag::ExtInf("segment.ts".to_string(), 6.0, None),
+                Tag::ExtInf {
+                    uri: "segment.ts".to_string(),
+                    duration: 6.0,
+                    title: None,
+                },
             ],
         };
 
@@ -1170,7 +1190,11 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(3),
                 Tag::ExtXTargetDuration(6),
-                Tag::ExtInf("segment.ts".to_string(), 6.5, None),
+                Tag::ExtInf {
+                    uri: "segment.ts".to_string(),
+                    duration: 6.5,
+                    title: None,
+                },
             ],
         };
 
@@ -1190,7 +1214,11 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(3),
                 Tag::ExtXTargetDuration(6),
-                Tag::ExtInf("segment.ts".to_string(), 6.49, None),
+                Tag::ExtInf {
+                    uri: "segment.ts".to_string(),
+                    duration: 6.49,
+                    title: None,
+                },
             ],
         };
 
@@ -1421,7 +1449,11 @@ third.ts
                 Tag::ExtM3U,
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtInf("segment.ts".to_string(), -1.0, None),
+                Tag::ExtInf {
+                    uri: "segment.ts".to_string(),
+                    duration: -1.0,
+                    title: None,
+                },
             ],
         };
 
@@ -1454,7 +1486,11 @@ third.ts
                     keyformat: None,
                     keyformatversions: Some("1".to_string()),
                 }),
-                Tag::ExtInf("segment.ts".to_string(), 9.5, None),
+                Tag::ExtInf {
+                    uri: "segment.ts".to_string(),
+                    duration: 9.5,
+                    title: None,
+                },
             ],
         };
 
@@ -1704,7 +1740,11 @@ third.ts
                     scte35_in: None,
                     extra_attributes: Vec::new(),
                 },
-                Tag::ExtInf("segment.ts".to_string(), 6.0, None),
+                Tag::ExtInf {
+                    uri: "segment.ts".to_string(),
+                    duration: 6.0,
+                    title: None,
+                },
             ],
         };
 
@@ -1724,7 +1764,11 @@ third.ts
                 Tag::ExtXVersion(5),
                 Tag::ExtXTargetDuration(6),
                 map.clone(),
-                Tag::ExtInf("segment.mp4".to_string(), 6.0, None),
+                Tag::ExtInf {
+                    uri: "segment.mp4".to_string(),
+                    duration: 6.0,
+                    title: None,
+                },
             ],
         };
         let i_frames = Playlist {
@@ -1734,7 +1778,11 @@ third.ts
                 Tag::ExtXTargetDuration(6),
                 Tag::ExtXIFramesOnly,
                 map,
-                Tag::ExtInf("segment.mp4".to_string(), 6.0, None),
+                Tag::ExtInf {
+                    uri: "segment.mp4".to_string(),
+                    duration: 6.0,
+                    title: None,
+                },
             ],
         };
 
@@ -1788,7 +1836,11 @@ third.ts
                         AttributeValue::Quoted("CH-STEREO".to_string()),
                     )],
                 },
-                Tag::ExtInf("segment.ts".to_string(), 6.0, None),
+                Tag::ExtInf {
+                    uri: "segment.ts".to_string(),
+                    duration: 6.0,
+                    title: None,
+                },
             ],
         };
 

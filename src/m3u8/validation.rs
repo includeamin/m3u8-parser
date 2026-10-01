@@ -27,7 +27,7 @@ pub enum ValidationError {
         actual: u8,
     },
     /// Error indicating that a media segment exceeds EXT-X-TARGETDURATION.
-    SegmentDurationExceedsTarget { duration: f32, target_duration: u64 },
+    SegmentDurationExceedsTarget { duration: f64, target_duration: u64 },
 
     /// Error indicating that the specified version is outside 1 through 12,
     /// the versions defined by draft-pantos-hls-rfc8216bis.
@@ -41,8 +41,8 @@ pub enum ValidationError {
     ///
     /// # Arguments
     ///
-    /// * `f32` - The invalid duration value that was encountered.
-    InvalidDuration(f32),
+    /// * `f64` - The invalid duration value that was encountered.
+    InvalidDuration(f64),
 
     /// Error indicating that the target duration specified is invalid.
     ///
@@ -79,8 +79,8 @@ pub enum ValidationError {
     ///
     /// # Arguments
     ///
-    /// * `f32` - The invalid planned duration value that was encountered in the date range.
-    InvalidDateRangePlannedDuration(f32),
+    /// * `f64` - The invalid planned duration value that was encountered in the date range.
+    InvalidDateRangePlannedDuration(f64),
     /// Error indicating incompatible EXT-X-DATERANGE attributes.
     InvalidDateRangeAttributes(String),
 

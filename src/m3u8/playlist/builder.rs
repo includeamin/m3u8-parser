@@ -37,10 +37,12 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtInf` tag.
-    pub fn extinf(self, url: &str, duration: f32, title: Option<String>) -> Self {
-        self.tags
-            .borrow_mut()
-            .push(Tag::ExtInf(url.to_string(), duration, title));
+    pub fn extinf(self, url: &str, duration: f64, title: Option<String>) -> Self {
+        self.tags.borrow_mut().push(Tag::ExtInf {
+            uri: url.to_string(),
+            duration,
+            title,
+        });
         self
     }
 
@@ -172,7 +174,7 @@ impl PlaylistBuilder {
         bandwidth: u32,
         codecs: Option<&str>,
         resolution: Option<&str>,
-        frame_rate: Option<f32>,
+        frame_rate: Option<f64>,
         audio: Option<&str>,
         video: Option<&str>,
         subtitle: Option<&str>,
@@ -198,7 +200,7 @@ impl PlaylistBuilder {
         bandwidth: u32,
         codecs: Option<&str>,
         resolution: Option<&str>,
-        frame_rate: Option<f32>,
+        frame_rate: Option<f64>,
         uri: &str,
     ) -> Self {
         self.tags.borrow_mut().push(Tag::ExtXIFrameStreamInf {

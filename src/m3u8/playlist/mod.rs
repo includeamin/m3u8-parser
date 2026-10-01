@@ -59,7 +59,7 @@ pub struct Playlist {
 #[derive(Debug, PartialEq, Clone)]
 pub struct MediaSegment {
     pub uri: String,
-    pub duration: f32,
+    pub duration: f64,
     pub title: Option<String>,
     /// The Media Sequence Number, starting from EXT-X-MEDIA-SEQUENCE (default 0).
     pub sequence: u64,
@@ -112,7 +112,11 @@ impl Playlist {
                 let tag = parse_tag(tag_line).map_err(syntax_error)?;
                 tags.push(tag.unwrap_or_else(|| Tag::Unknown(tag_line.to_string())));
             } else if let Some((duration, title, _)) = pending_extinf.take() {
-                tags.push(Tag::ExtInf(trimmed.to_string(), duration, title));
+                tags.push(Tag::ExtInf {
+                    uri: trimmed.to_string(),
+                    duration,
+                    title,
+                });
             } else {
                 tags.push(Tag::Uri(trimmed.to_string()));
             }
@@ -164,7 +168,11 @@ impl Playlist {
                 Tag::ExtXByteRange(value) => byterange = Some(value.clone()),
                 Tag::ExtXProgramDateTime(value) => program_date_time = Some(value.clone()),
                 Tag::ExtXGap => gap = true,
-                Tag::ExtInf(uri, duration, title) => {
+                Tag::ExtInf {
+                    uri,
+                    duration,
+                    title,
+                } => {
                     segments.push(MediaSegment {
                         uri: uri.clone(),
                         duration: *duration,
@@ -214,7 +222,7 @@ impl Playlist {
                     errors.push(ValidationError::InvalidVersion(*version));
                 }
             }
-            Tag::ExtInf(_, duration, _) if *duration <= 0.0 => {
+            Tag::ExtInf { duration, .. } if *duration <= 0.0 => {
                 errors.push(ValidationError::InvalidDuration(*duration));
             }
             Tag::ExtXTargetDuration(duration) if *duration == 0 => {
@@ -288,13 +296,13 @@ impl Playlist {
                 }
                 if let Some(duration) = duration {
                     if *duration < 0.0 {
-                        errors.push(ValidationError::InvalidDuration(*duration as f32));
+                        errors.push(ValidationError::InvalidDuration(*duration));
                     }
                 }
                 if let Some(planned_duration) = planned_duration {
                     if *planned_duration < 0.0 {
                         errors.push(ValidationError::InvalidDateRangePlannedDuration(
-                            *planned_duration as f32,
+                            *planned_duration,
                         ));
                     }
                 }
@@ -431,7 +439,7 @@ impl Playlist {
             _ => None,
         }) {
             for tag in &self.tags {
-                if let Tag::ExtInf(_, duration, _) = tag {
+                if let Tag::ExtInf { duration, .. } = tag {
                     if duration.round() as u64 > target_duration {
                         errors.push(ValidationError::SegmentDurationExceedsTarget {
                             duration: *duration,
@@ -444,7 +452,7 @@ impl Playlist {
     }
 }
 
-fn parse_extinf(value: &str) -> Result<(f32, Option<String>), SyntaxError> {
+fn parse_extinf(value: &str) -> Result<(f64, Option<String>), SyntaxError> {
     let invalid = || SyntaxError::InvalidExtInf(value.to_string());
     let (duration, title) = value.split_once(',').ok_or_else(invalid)?;
     let duration = duration.trim().parse().map_err(|_| invalid())?;
@@ -834,7 +842,7 @@ fn is_media_segment_tag(tag: &Tag) -> bool {
             | Tag::ExtXMediaSequence(_)
             | Tag::ExtXDiscontinuitySequence(_)
             | Tag::ExtXEndList
-            | Tag::ExtInf(..)
+            | Tag::ExtInf { .. }
             | Tag::ExtXKey(_)
             | Tag::ExtXMap(_)
             | Tag::ExtXProgramDateTime(_)
@@ -861,7 +869,7 @@ fn minimum_version(tag: &Tag, has_i_frames_only: bool) -> Option<u8> {
                 None
             }
         }
-        Tag::ExtInf(_, duration, _) if duration.fract() != 0.0 => Some(3),
+        Tag::ExtInf { duration, .. } if duration.fract() != 0.0 => Some(3),
         Tag::ExtXByteRange(_) | Tag::ExtXIFramesOnly => Some(4),
         Tag::ExtXMap(_) if has_i_frames_only => Some(5),
         Tag::ExtXMap(_) => Some(6),
@@ -893,7 +901,7 @@ fn minimum_version(tag: &Tag, has_i_frames_only: bool) -> Option<u8> {
 
 fn tag_name(tag: &Tag) -> &'static str {
     match tag {
-        Tag::ExtInf(..) => "EXTINF",
+        Tag::ExtInf { .. } => "EXTINF",
         Tag::ExtXByteRange(_) => "EXT-X-BYTERANGE",
         Tag::ExtXIFramesOnly => "EXT-X-I-FRAMES-ONLY",
         Tag::ExtXMap(_) => "EXT-X-MAP",

@@ -13,8 +13,13 @@ pub enum Tag {
     //    Media Playlist file.  It applies to the entire Media Playlist file.
     //    It is OPTIONAL.  Its format is:
     ExtXPlaylistType(String),
-    /// Represents a media segment with a duration and an optional title.
-    ExtInf(String, f32, Option<String>),
+    /// A media segment: its EXTINF duration and optional title, and the URI line that follows.
+    ExtInf {
+        uri: String,
+        /// Duration in seconds.
+        duration: f64,
+        title: Option<String>,
+    },
     /// Indicates the target duration for media segments.
     ExtXTargetDuration(u64),
     /// Specifies the media sequence number.
@@ -58,7 +63,7 @@ pub enum Tag {
         average_bandwidth: Option<u32>,
         codecs: Option<String>,
         resolution: Option<String>,
-        frame_rate: Option<f32>,
+        frame_rate: Option<f64>,
         audio: Option<String>,
         video: Option<String>,
         subtitle: Option<String>,
@@ -70,7 +75,7 @@ pub enum Tag {
         average_bandwidth: Option<u32>,
         codecs: Option<String>,
         resolution: Option<String>,
-        frame_rate: Option<f32>,
+        frame_rate: Option<f64>,
         uri: String,
     },
     /// Indicates a gap in the playlist.
@@ -109,7 +114,7 @@ pub enum Tag {
         can_block_reload: Option<bool>,
     },
     /// Represents part information.
-    ExtXPartInf { part_target_duration: f32 },
+    ExtXPartInf { part_target_duration: f64 },
     /// Represents a preload hint.
     ExtXPreloadHint {
         /// The hinted resource type, `PART` or `MAP`.
@@ -127,7 +132,7 @@ pub enum Tag {
     /// Represents a part of a media segment.
     ExtXPart {
         uri: String,
-        duration: f32,
+        duration: f64,
         independent: Option<bool>,
         byterange: Option<String>,
         gap: Option<bool>,
@@ -246,7 +251,11 @@ impl std::fmt::Display for Tag {
         match self {
             Tag::ExtM3U => write!(f, "#EXTM3U"),
             Tag::ExtXVersion(version) => write!(f, "#EXT-X-VERSION:{}", version),
-            Tag::ExtInf(url, duration, title) => {
+            Tag::ExtInf {
+                uri: url,
+                duration,
+                title,
+            } => {
                 // Shortest exact form: whole durations stay integers for version < 3.
                 let title = title.as_deref().unwrap_or_default();
                 write!(f, "#EXTINF:{},{}\n{}", duration, title, url)
