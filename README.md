@@ -13,7 +13,12 @@ by [RFC 8216](https://tools.ietf.org/html/rfc8216).
 ## Features
 
 - Parse M3U8 playlists from strings, files, or readers
-- Generate M3U8 playlists and write them to strings, files, or writers
+- Generate M3U8 playlists with `PlaylistBuilder` and write them to strings
+  (`Display`/`FromStr`), files, or any `std::io::Write`
+- Resolve `EXT-X-DEFINE` variables (`NAME`/`VALUE`, `IMPORT`, `QUERYPARAM`)
+  with `Playlist::substitute_variables`
+- Typed attribute values such as `ByteRange`, `Key`, `Map`, and numeric
+  `TIME-OFFSET`, with `f64` durations
 - Derive `MediaSegment` values from a playlist with the media sequence number,
   discontinuity flag, and effective `KEY`, `MAP`, `BYTERANGE`, `GAP`, and
   `PROGRAM-DATE-TIME` state for each `EXTINF` segment.
@@ -25,9 +30,10 @@ by [RFC 8216](https://tools.ietf.org/html/rfc8216).
 - RFC 8216 semantic validation enforces `EXTM3U` placement, singleton tags,
   Master/Media Playlist separation, `EXT-X-STREAM-INF` URI pairing, required
   media target durations, RFC target-duration rounding, tag version gates
-  (versions 1 through 12), encryption and session key attribute combinations,
-  `CLOSED-CAPTIONS` rendition rules, `END-ON-NEXT` date-range constraints, and
-  Master Playlist rendition-group references. Validation still does not enforce
+  (versions 1 through 12), tags removed in later versions, encryption and
+  session key attribute combinations, `CLOSED-CAPTIONS` rendition rules,
+  ISO 8601 date-times, byte-range continuity, `END-ON-NEXT` date-range
+  constraints, and Master Playlist rendition-group references. Validation still does not enforce
   every cross-tag constraint defined by the RFC.
 - RFC 8216 tag coverage:
     - **Basic Tags**:

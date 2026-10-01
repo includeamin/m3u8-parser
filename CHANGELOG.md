@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [unreleased]
+
+### 🚀 Features
+
+- Increase support for RFC (#7)
+- [**breaking**] Write playlists to strings and writers; drop unused errors
+- [**breaking**] Type byte ranges and start offsets; validate date-times
+- [**breaking**] Extend PlaylistBuilder and drop shared mutable state
+- Substitute EXT-X-DEFINE variables; flag removed ALLOW-CACHE
+
+### 🐛 Bug Fixes
+
+- [**breaking**] Align parsing, serialization, and validation with the HLS spec (#8)
+
+### 🚜 Refactor
+
+- [**breaking**] Use named fields for ExtInf and f64 for durations
+
+## [0.6.1] - 2024-11-05
+
+### 🐛 Bug Fixes
+
+- Fix EXTINF duration (#5)
+
 ## [0.6.0] - 2024-11-05
 
 ### 🚀 Features
