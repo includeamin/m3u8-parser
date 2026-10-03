@@ -127,6 +127,8 @@ pub enum SyntaxError {
         attribute: &'static str,
         value: String,
     },
+    /// A tag that requires a value has none.
+    MissingTagValue { tag: &'static str },
     /// A tag's value does not have the type the tag requires.
     InvalidTagValue { tag: &'static str, value: String },
     /// A tag's attributes are present in a combination the specification forbids.
@@ -152,6 +154,7 @@ impl fmt::Display for SyntaxError {
                 attribute,
                 value,
             } => write!(f, "invalid {tag} {attribute}: {value}"),
+            SyntaxError::MissingTagValue { tag } => write!(f, "{tag} requires a value"),
             SyntaxError::InvalidTagValue { tag, value } => write!(f, "invalid {tag}: {value}"),
             SyntaxError::ConflictingAttributes { tag, reason } => write!(f, "{tag}: {reason}"),
         }

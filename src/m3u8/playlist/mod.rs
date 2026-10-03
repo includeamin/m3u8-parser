@@ -248,7 +248,7 @@ impl Playlist {
                     errors.push(ValidationError::InvalidVersion(*version));
                 }
             }
-            Tag::ExtInf { duration, .. } if *duration <= 0.0 => {
+            Tag::ExtInf { duration, .. } if !duration.is_finite() || *duration <= 0.0 => {
                 errors.push(ValidationError::InvalidDuration(*duration));
             }
             Tag::ExtXTargetDuration(duration) if *duration == 0 => {
@@ -324,12 +324,12 @@ impl Playlist {
                     errors.push(ValidationError::InvalidDateRangeEndDate);
                 }
                 if let Some(duration) = duration {
-                    if *duration < 0.0 {
+                    if !duration.is_finite() || *duration < 0.0 {
                         errors.push(ValidationError::InvalidDuration(*duration));
                     }
                 }
                 if let Some(planned_duration) = planned_duration {
-                    if *planned_duration < 0.0 {
+                    if !planned_duration.is_finite() || *planned_duration < 0.0 {
                         errors.push(ValidationError::InvalidDateRangePlannedDuration(
                             *planned_duration,
                         ));
@@ -512,10 +512,41 @@ impl Playlist {
 fn parse_extinf(value: &str) -> Result<(f64, Option<String>), SyntaxError> {
     let invalid = || SyntaxError::InvalidExtInf(value.to_string());
     let (duration, title) = value.split_once(',').ok_or_else(invalid)?;
-    let duration = duration.trim().parse().map_err(|_| invalid())?;
+    let duration: f64 = duration.trim().parse().map_err(|_| invalid())?;
+    if !duration.is_finite() {
+        return Err(invalid());
+    }
     let title = title.trim();
     Ok((duration, (!title.is_empty()).then(|| title.to_string())))
 }
+
+/// Tags that are meaningless without a value; a bare occurrence is a syntax error.
+const VALUE_TAGS: [&str; 24] = [
+    "EXT-X-VERSION",
+    "EXT-X-TARGETDURATION",
+    "EXT-X-MEDIA-SEQUENCE",
+    "EXT-X-DISCONTINUITY-SEQUENCE",
+    "EXT-X-BITRATE",
+    "EXT-X-PLAYLIST-TYPE",
+    "EXT-X-ALLOW-CACHE",
+    "EXT-X-PROGRAM-DATE-TIME",
+    "EXT-X-BYTERANGE",
+    "EXT-X-DEFINE",
+    "EXT-X-KEY",
+    "EXT-X-SESSION-KEY",
+    "EXT-X-MAP",
+    "EXT-X-DATERANGE",
+    "EXT-X-START",
+    "EXT-X-STREAM-INF",
+    "EXT-X-I-FRAME-STREAM-INF",
+    "EXT-X-MEDIA",
+    "EXT-X-SESSION-DATA",
+    "EXT-X-SERVER-CONTROL",
+    "EXT-X-PART-INF",
+    "EXT-X-PART",
+    "EXT-X-SKIP",
+    "EXT-X-PRELOAD-HINT",
+];
 
 /// Parses a tag line without its leading `#`. Returns `Ok(None)` for unrecognized tags.
 fn parse_tag(line: &str) -> Result<Option<Tag>, SyntaxError> {
@@ -583,6 +614,10 @@ fn parse_tag(line: &str) -> Result<Option<Tag>, SyntaxError> {
         ("EXT-X-SKIP", Some(_)) => parse_skip(&attributes()?)?,
         ("EXT-X-PRELOAD-HINT", Some(_)) => parse_preload_hint(&attributes()?)?,
         ("EXT-X-RENDITION-REPORT", Some(_)) => parse_rendition_report(&attributes()?)?,
+        (name, None) => match VALUE_TAGS.iter().find(|tag| **tag == name) {
+            Some(tag) => return Err(SyntaxError::MissingTagValue { tag }),
+            None => return Ok(None),
+        },
         _ => return Ok(None),
     };
 
@@ -832,6 +867,22 @@ fn parse_rendition_report(attributes: &[Attribute]) -> Result<Tag, SyntaxError> 
     })
 }
 
+/// Whether `day` exists in `month` of `year`; all three are already known to be numeric.
+fn day_in_month(year: &str, month: &str, day: &str) -> bool {
+    let (year, month, day): (u32, u32, u32) = match (year.parse(), month.parse(), day.parse()) {
+        (Ok(year), Ok(month), Ok(day)) => (year, month, day),
+        _ => return false,
+    };
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    day <= days
+}
+
 /// Checks the ISO 8601 date-time form HLS uses, e.g. `2010-02-19T14:54:23.031+08:00`.
 fn is_date_time(value: &str) -> bool {
     fn number_in(value: &str, digits: usize, min: u32, max: u32) -> bool {
@@ -850,6 +901,7 @@ fn is_date_time(value: &str) -> bool {
         [year, month, day] if number_in(year, 4, 0, 9999)
             && number_in(month, 2, 1, 12)
             && number_in(day, 2, 1, 31)
+            && day_in_month(year, month, day)
     );
 
     let (clock, zone) = time.split_at(time.find(['Z', '+', '-']).unwrap_or(time.len()));
@@ -873,6 +925,9 @@ fn is_date_time(value: &str) -> bool {
         "" | "Z" => true,
         _ => {
             let offset = zone[1..].replace(':', "");
+            if !offset.is_ascii() {
+                return false;
+            }
             match offset.len() {
                 2 => number_in(&offset, 2, 0, 23),
                 4 => number_in(&offset[..2], 2, 0, 23) && number_in(&offset[2..], 2, 0, 59),

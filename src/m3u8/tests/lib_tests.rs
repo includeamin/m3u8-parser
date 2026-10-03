@@ -2259,4 +2259,71 @@ seg2.mp4
             SubstitutionError::InvalidDefine(_)
         ));
     }
+
+    #[test]
+    fn test_validate_non_ascii_time_zone_does_not_panic() {
+        let playlist: Playlist =
+            "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00+a\u{20ac}\n"
+                .parse()
+                .unwrap();
+        let errors = playlist.validate().unwrap_err();
+        assert!(errors.contains(&ValidationError::InvalidProgramDateTime));
+    }
+
+    #[test]
+    fn test_validate_rejects_nonexistent_day() {
+        for date in ["2021-02-31", "2021-04-31", "2023-02-29"] {
+            let playlist: Playlist =
+                format!("#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:{date}T00:00:00Z\n")
+                    .parse()
+                    .unwrap();
+            assert!(playlist
+                .validate()
+                .unwrap_err()
+                .contains(&ValidationError::InvalidProgramDateTime));
+        }
+        let leap: Playlist =
+            "#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXT-X-PROGRAM-DATE-TIME:2024-02-29T00:00:00Z\n"
+                .parse()
+                .unwrap();
+        assert_eq!(leap.validate(), Ok(()));
+    }
+
+    #[test]
+    fn test_parse_rejects_non_finite_extinf_duration() {
+        for duration in ["NaN", "inf", "-inf"] {
+            let (line, kind) = syntax_error(&format!("#EXTM3U\n#EXTINF:{duration},\na.ts\n"));
+            assert_eq!(line, 2);
+            assert!(matches!(kind, SyntaxError::InvalidExtInf(_)));
+        }
+    }
+
+    #[test]
+    fn test_validate_rejects_non_finite_duration_from_builder_tags() {
+        let playlist = Playlist {
+            tags: vec![
+                Tag::ExtM3U,
+                Tag::ExtXTargetDuration(10),
+                Tag::ExtInf {
+                    uri: "a.ts".to_string(),
+                    duration: f64::NAN,
+                    title: None,
+                },
+            ],
+        };
+        assert!(playlist
+            .validate()
+            .unwrap_err()
+            .iter()
+            .any(|error| matches!(error, ValidationError::InvalidDuration(_))));
+    }
+
+    #[test]
+    fn test_parse_rejects_bare_value_tags() {
+        for tag in ["EXT-X-TARGETDURATION", "EXT-X-KEY", "EXT-X-VERSION"] {
+            let (line, kind) = syntax_error(&format!("#EXTM3U\n#{tag}\n"));
+            assert_eq!(line, 2);
+            assert!(matches!(kind, SyntaxError::MissingTagValue { .. }));
+        }
+    }
 }

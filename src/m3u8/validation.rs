@@ -50,7 +50,7 @@ pub enum ValidationError {
     ///
     /// # Arguments
     ///
-    /// * `u32` - The invalid target duration value that was encountered.
+    /// * `u64` - The invalid target duration value that was encountered.
     InvalidTargetDuration(u64),
 
     /// Error indicating that an invalid key method was specified.
