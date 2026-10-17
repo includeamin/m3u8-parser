@@ -4,8 +4,9 @@
 [![Documentation](https://docs.rs/m3u8-parser/badge.svg)](https://docs.rs/m3u8-parser)
 [![check](https://github.com/includeamin/m3u8-parser/actions/workflows/rust.yml/badge.svg)](https://github.com/includeamin/m3u8-parser/actions/workflows/rust.yml)
 
-A Rust crate for parsing and creating M3U8 version 7 files for HTTP Live Streaming (HLS), as specified
-by [RFC 8216](https://tools.ietf.org/html/rfc8216).
+A Rust crate for parsing and creating M3U8 files for HTTP Live Streaming (HLS), as specified
+by [RFC 8216](https://tools.ietf.org/html/rfc8216) and the protocol versions up to 12 defined
+by draft-pantos-hls-rfc8216bis.
 
 > [!IMPORTANT]
 > This project is currently under active development. Please note that features and APIs are subject to change. My goal is to ensure full compatibility with [RFC 8216](https://tools.ietf.org/html/rfc8216).
@@ -77,7 +78,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-m3u8-parser = "0.7.0"
+m3u8-parser = "0.8.0"
 ```
 
 ## Usage

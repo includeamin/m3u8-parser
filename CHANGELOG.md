@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [unreleased]
+## [0.8.0] - 2026-10-17
 
 ### 🚀 Features
 
@@ -11,14 +11,25 @@ All notable changes to this project will be documented in this file.
 - [**breaking**] Type byte ranges and start offsets; validate date-times
 - [**breaking**] Extend PlaylistBuilder and drop shared mutable state
 - Substitute EXT-X-DEFINE variables; flag removed ALLOW-CACHE
+- [**breaking**] Preserve unmodeled attributes on STREAM-INF, I-FRAME-STREAM-INF and MEDIA
+- Flag tags whose strings break serialization during validation
+- Validate uniqueness, rendition group, low-latency and ordering rules
 
 ### 🐛 Bug Fixes
 
 - [**breaking**] Align parsing, serialization, and validation with the HLS spec (#8)
+- Avoid validate panic on non-ASCII time zones
+- Reject NaN and infinite durations, bare value tags and impossible dates
+- Reject variable values that could inject tags or attributes during substitution
 
 ### 🚜 Refactor
 
 - [**breaking**] Use named fields for ExtInf and f64 for durations
+
+### ⚙️ Miscellaneous Tasks
+
+- Publish the crate and create a GitHub release on version tags
+- Add MSRV (1.82), docs and package checks; update actions
 
 ## [0.6.1] - 2024-11-05
 
