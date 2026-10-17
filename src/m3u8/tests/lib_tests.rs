@@ -2515,4 +2515,21 @@ v.m3u8\n\
             "EXT-X-DISCONTINUITY-SEQUENCE".to_string()
         )));
     }
+
+    #[test]
+    fn test_byte_order_mark_after_whitespace_does_not_survive_round_trip() {
+        let playlist: Playlist = "\u{b}\u{feff}a.ts\n".parse().unwrap();
+        assert_eq!(playlist.tags, vec![Tag::Uri("a.ts".to_string())]);
+        let reparsed: Playlist = playlist.to_string().parse().unwrap();
+        assert_eq!(reparsed, playlist);
+    }
+
+    #[test]
+    fn test_parse_rejects_quote_inside_unquoted_attribute_value() {
+        let (line, kind) = syntax_error(
+            "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"n\",CHANNELS=2\"\"\n",
+        );
+        assert_eq!(line, 2);
+        assert!(matches!(kind, SyntaxError::MalformedAttributeList { .. }));
+    }
 }

@@ -114,7 +114,9 @@ impl Playlist {
                 line: line_number,
                 kind,
             };
-            let trimmed = line.trim();
+            // A BOM is not whitespace to `trim`, but it must not survive at a line
+            // start: reading the written playlist would strip it as a file prefix.
+            let trimmed = line.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
             if trimmed.is_empty() {
                 continue;
             }

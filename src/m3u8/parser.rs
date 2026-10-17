@@ -67,7 +67,11 @@ pub(crate) fn parse_attribute_list(input: &str) -> Result<Vec<Attribute>, Syntax
             (&quoted[..end], &quoted[end + 1..])
         } else {
             let end = value_start.find(',').unwrap_or(value_start.len());
-            (value_start[..end].trim_end(), &value_start[end..])
+            let value = value_start[..end].trim_end();
+            if value.contains('"') {
+                return Err(malformed("unexpected '\"' in unquoted value"));
+            }
+            (value, &value_start[end..])
         };
         attributes.push(Attribute {
             name: name.to_string(),
