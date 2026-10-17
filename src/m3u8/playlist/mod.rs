@@ -47,6 +47,7 @@ use crate::m3u8::parser::{
 };
 use crate::m3u8::tags::{ByteRange, Key, Map, Tag};
 use crate::m3u8::validation::ValidationError;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
@@ -238,6 +239,7 @@ impl Playlist {
         }
 
         self.validate_playlist_rules(&mut errors);
+        self.validate_structure_rules(&mut errors);
 
         if errors.is_empty() {
             Ok(())
@@ -357,6 +359,134 @@ impl Playlist {
                 errors.push(ValidationError::InvalidRenditionReportUri);
             }
             _ => {}
+        }
+    }
+
+    /// Uniqueness, grouping and ordering rules that span several tags.
+    fn validate_structure_rules(&self, errors: &mut Vec<ValidationError>) {
+        let mut previous: Option<&Tag> = None;
+        for tag in &self.tags {
+            if let Tag::Uri(uri) = tag {
+                if !matches!(previous, Some(&Tag::ExtXStreamInf { .. })) {
+                    errors.push(ValidationError::OrphanUri(uri.clone()));
+                }
+            }
+            previous = Some(tag);
+        }
+
+        let mut date_range_ids = HashSet::new();
+        let mut session_data = HashSet::new();
+        let mut renditions = HashSet::new();
+        let mut defaults = HashSet::new();
+        for tag in &self.tags {
+            match tag {
+                Tag::ExtXDateRange { id, .. } if !date_range_ids.insert(id) => {
+                    errors.push(ValidationError::DuplicateDateRangeId(id.clone()));
+                }
+                Tag::ExtXSessionData { id, language, .. }
+                    if !session_data.insert((id, language)) =>
+                {
+                    errors.push(ValidationError::DuplicateSessionData {
+                        id: id.clone(),
+                        language: language.clone(),
+                    });
+                }
+                Tag::ExtXMedia {
+                    type_,
+                    group_id,
+                    name,
+                    default,
+                    autoselect,
+                    forced,
+                    ..
+                } => {
+                    if let Some(name) = name {
+                        if !renditions.insert((type_, group_id, name)) {
+                            errors.push(ValidationError::InvalidMediaAttributes(format!(
+                                "GROUP-ID={group_id} has more than one rendition named {name}"
+                            )));
+                        }
+                    }
+                    if *default == Some(true) && !defaults.insert((type_, group_id)) {
+                        errors.push(ValidationError::InvalidMediaAttributes(format!(
+                            "GROUP-ID={group_id} has more than one DEFAULT=YES rendition"
+                        )));
+                    }
+                    if *default == Some(true) && *autoselect == Some(false) {
+                        errors.push(ValidationError::InvalidMediaAttributes(
+                            "DEFAULT=YES requires AUTOSELECT=YES when AUTOSELECT is present"
+                                .to_string(),
+                        ));
+                    }
+                    if forced.is_some() && type_ != "SUBTITLES" {
+                        errors.push(ValidationError::InvalidMediaAttributes(
+                            "FORCED is only allowed with TYPE=SUBTITLES".to_string(),
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let has_part = self
+            .tags
+            .iter()
+            .any(|tag| matches!(tag, Tag::ExtXPart { .. }));
+        let part_target = self.tags.iter().find_map(|tag| match tag {
+            Tag::ExtXPartInf {
+                part_target_duration,
+            } => Some(*part_target_duration),
+            _ => None,
+        });
+        if has_part && part_target.is_none() {
+            errors.push(ValidationError::MissingPartInf);
+        }
+
+        let target_duration = self.tags.iter().find_map(|tag| match tag {
+            Tag::ExtXTargetDuration(duration) => Some(*duration as f64),
+            _ => None,
+        });
+        for tag in &self.tags {
+            let Tag::ExtXServerControl {
+                hold_back,
+                part_hold_back,
+                ..
+            } = tag
+            else {
+                continue;
+            };
+            if let (Some(hold_back), Some(target)) = (hold_back, target_duration) {
+                if *hold_back < 3.0 * target {
+                    errors.push(ValidationError::InvalidServerControl(
+                        "HOLD-BACK must be at least three times EXT-X-TARGETDURATION".to_string(),
+                    ));
+                }
+            }
+            if let (Some(part_hold_back), Some(part_target)) = (part_hold_back, part_target) {
+                if *part_hold_back < 2.0 * part_target {
+                    errors.push(ValidationError::InvalidServerControl(
+                        "PART-HOLD-BACK must be at least twice PART-TARGET".to_string(),
+                    ));
+                }
+            }
+        }
+
+        let mut seen_segment = false;
+        for tag in &self.tags {
+            match tag {
+                Tag::ExtInf { .. } => seen_segment = true,
+                Tag::ExtXMediaSequence(_) if seen_segment => {
+                    errors.push(ValidationError::TagAfterFirstSegment(
+                        "EXT-X-MEDIA-SEQUENCE".to_string(),
+                    ));
+                }
+                Tag::ExtXDiscontinuitySequence(_) if seen_segment => {
+                    errors.push(ValidationError::TagAfterFirstSegment(
+                        "EXT-X-DISCONTINUITY-SEQUENCE".to_string(),
+                    ));
+                }
+                _ => {}
+            }
         }
     }
 

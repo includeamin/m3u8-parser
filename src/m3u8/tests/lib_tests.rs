@@ -1085,7 +1085,7 @@ https://media.example.com/third.ts
     #[test]
     fn test_validate_extm3u_must_be_first() {
         let playlist = Playlist {
-            tags: vec![Tag::Uri("segment.ts".to_string()), Tag::ExtM3U],
+            tags: vec![Tag::ExtXIndependentSegments, Tag::ExtM3U],
         };
 
         assert_eq!(
@@ -1601,28 +1601,30 @@ third.ts
 
     #[test]
     fn test_validate_closed_captions_media_rules() {
-        let media = |type_: &str, uri: Option<&str>, instream_id: Option<&str>| Tag::ExtXMedia {
-            type_: type_.to_string(),
-            group_id: "group".to_string(),
-            name: Some("name".to_string()),
-            uri: uri.map(str::to_string),
-            default: None,
-            autoselect: None,
-            characteristics: None,
-            language: None,
-            instream_id: instream_id.map(str::to_string),
-            language_codec: None,
-            forced: None,
-            channels: None,
-            extra_attributes: Vec::new(),
+        let media = |type_: &str, name: &str, uri: Option<&str>, instream_id: Option<&str>| {
+            Tag::ExtXMedia {
+                type_: type_.to_string(),
+                group_id: "group".to_string(),
+                name: Some(name.to_string()),
+                uri: uri.map(str::to_string),
+                default: None,
+                autoselect: None,
+                characteristics: None,
+                language: None,
+                instream_id: instream_id.map(str::to_string),
+                language_codec: None,
+                forced: None,
+                channels: None,
+                extra_attributes: Vec::new(),
+            }
         };
         let playlist = Playlist {
             tags: vec![
                 Tag::ExtM3U,
                 Tag::ExtXVersion(6),
-                media("CLOSED-CAPTIONS", Some("cc.m3u8"), None),
-                media("AUDIO", None, Some("CC1")),
-                media("CLOSED-CAPTIONS", None, Some("CC1")),
+                media("CLOSED-CAPTIONS", "a", Some("cc.m3u8"), None),
+                media("AUDIO", "b", None, Some("CC1")),
+                media("CLOSED-CAPTIONS", "c", None, Some("CC1")),
             ],
         };
 
@@ -2127,7 +2129,7 @@ media.mp4
             .extm3u()
             .version(9)
             .target_duration(4)
-            .server_control(Some(24.0), Some(1.5), true)
+            .server_control(Some(24.0), Some(2.0), true)
             .part_inf(1.0)
             .skip(3)
             .date_range("ad-1", "2024-01-01T00:00:00Z")
@@ -2146,7 +2148,7 @@ media.mp4
             "#EXTM3U
 #EXT-X-VERSION:9
 #EXT-X-TARGETDURATION:4
-#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24,PART-HOLD-BACK=1.5,CAN-BLOCK-RELOAD=YES
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24,PART-HOLD-BACK=2,CAN-BLOCK-RELOAD=YES
 #EXT-X-PART-INF:PART-TARGET=1
 #EXT-X-SKIP:SKIPPED-SEGMENTS=3
 #EXT-X-DATERANGE:ID=\"ad-1\",START-DATE=\"2024-01-01T00:00:00Z\"
@@ -2416,5 +2418,101 @@ v.m3u8\n\
                 .iter()
                 .any(|error| matches!(error, ValidationError::UnserializableTag(_))));
         }
+    }
+
+    fn validation_errors(data: &str) -> Vec<ValidationError> {
+        data.parse::<Playlist>().unwrap().validate().unwrap_err()
+    }
+
+    #[test]
+    fn test_validate_orphan_uri() {
+        let errors = validation_errors("#EXTM3U\n#EXT-X-TARGETDURATION:10\nstray.ts\n");
+        assert!(errors.contains(&ValidationError::OrphanUri("stray.ts".to_string())));
+        let ok = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n";
+        assert_eq!(ok.parse::<Playlist>().unwrap().validate(), Ok(()));
+    }
+
+    #[test]
+    fn test_validate_duplicate_date_range_and_session_data() {
+        let errors = validation_errors(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:10\n\
+#EXT-X-DATERANGE:ID=\"a\",START-DATE=\"2024-01-01T00:00:00Z\"\n\
+#EXT-X-DATERANGE:ID=\"a\",START-DATE=\"2024-01-01T00:00:00Z\"\n",
+        );
+        assert!(errors.contains(&ValidationError::DuplicateDateRangeId("a".to_string())));
+
+        let errors = validation_errors(
+            "#EXTM3U\n#EXT-X-SESSION-DATA:DATA-ID=\"d\",VALUE=\"1\"\n#EXT-X-SESSION-DATA:DATA-ID=\"d\",VALUE=\"2\"\n",
+        );
+        assert!(errors.contains(&ValidationError::DuplicateSessionData {
+            id: "d".to_string(),
+            language: None,
+        }));
+        let ok = "#EXTM3U\n#EXT-X-SESSION-DATA:DATA-ID=\"d\",VALUE=\"1\",LANGUAGE=\"en\"\n#EXT-X-SESSION-DATA:DATA-ID=\"d\",VALUE=\"2\",LANGUAGE=\"fr\"\n";
+        assert_eq!(ok.parse::<Playlist>().unwrap().validate(), Ok(()));
+    }
+
+    #[test]
+    fn test_validate_media_group_rules() {
+        let media =
+            |attributes: &str| format!("#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"g\",{attributes}\n");
+        let invalid = |reason: &str| ValidationError::InvalidMediaAttributes(reason.to_string());
+
+        let errors = validation_errors(&format!(
+            "#EXTM3U\n{}{}",
+            media("NAME=\"a\",DEFAULT=YES"),
+            media("NAME=\"b\",DEFAULT=YES")
+        ));
+        assert!(errors.contains(&invalid(
+            "GROUP-ID=g has more than one DEFAULT=YES rendition"
+        )));
+
+        let errors = validation_errors(&format!(
+            "#EXTM3U\n{}{}",
+            media("NAME=\"a\""),
+            media("NAME=\"a\"")
+        ));
+        assert!(errors.contains(&invalid("GROUP-ID=g has more than one rendition named a")));
+
+        let errors = validation_errors(&format!(
+            "#EXTM3U\n{}",
+            media("NAME=\"a\",DEFAULT=YES,AUTOSELECT=NO,FORCED=NO")
+        ));
+        assert!(errors.contains(&invalid(
+            "DEFAULT=YES requires AUTOSELECT=YES when AUTOSELECT is present"
+        )));
+        assert!(errors.contains(&invalid("FORCED is only allowed with TYPE=SUBTITLES")));
+    }
+
+    #[test]
+    fn test_validate_low_latency_rules() {
+        let errors = validation_errors(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-PART:URI=\"p.mp4\",DURATION=1\n",
+        );
+        assert!(errors.contains(&ValidationError::MissingPartInf));
+
+        let errors = validation_errors(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-PART-INF:PART-TARGET=1\n\
+#EXT-X-SERVER-CONTROL:HOLD-BACK=8,PART-HOLD-BACK=1\n",
+        );
+        assert!(errors.contains(&ValidationError::InvalidServerControl(
+            "HOLD-BACK must be at least three times EXT-X-TARGETDURATION".to_string()
+        )));
+        assert!(errors.contains(&ValidationError::InvalidServerControl(
+            "PART-HOLD-BACK must be at least twice PART-TARGET".to_string()
+        )));
+    }
+
+    #[test]
+    fn test_validate_sequence_tags_precede_first_segment() {
+        let errors = validation_errors(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:5,\na.ts\n#EXT-X-MEDIA-SEQUENCE:3\n#EXT-X-DISCONTINUITY-SEQUENCE:1\n",
+        );
+        assert!(errors.contains(&ValidationError::TagAfterFirstSegment(
+            "EXT-X-MEDIA-SEQUENCE".to_string()
+        )));
+        assert!(errors.contains(&ValidationError::TagAfterFirstSegment(
+            "EXT-X-DISCONTINUITY-SEQUENCE".to_string()
+        )));
     }
 }

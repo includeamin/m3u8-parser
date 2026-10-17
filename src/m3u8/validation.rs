@@ -103,6 +103,28 @@ pub enum ValidationError {
     /// alter the playlist's structure. Holds the tag as it would be written.
     UnserializableTag(String),
 
+    /// Error indicating that a URI line is not preceded by EXTINF or EXT-X-STREAM-INF.
+    OrphanUri(String),
+
+    /// Error indicating that an EXT-X-DATERANGE ID is used more than once.
+    DuplicateDateRangeId(String),
+
+    /// Error indicating that two EXT-X-SESSION-DATA tags share a DATA-ID and LANGUAGE.
+    DuplicateSessionData {
+        id: String,
+        language: Option<String>,
+    },
+
+    /// Error indicating that EXT-X-PART is used without EXT-X-PART-INF.
+    MissingPartInf,
+
+    /// Error indicating that EXT-X-SERVER-CONTROL hold-back values are too short
+    /// for the playlist's target durations.
+    InvalidServerControl(String),
+
+    /// Error indicating that a tag must precede the first media segment but follows it.
+    TagAfterFirstSegment(String),
+
     /// Error indicating that a segment's EXT-X-BYTERANGE has no offset but does not
     /// follow a sub-range of the same resource. Holds the segment URI.
     InvalidByteRange(String),
