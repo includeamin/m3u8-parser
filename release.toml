@@ -1,0 +1,5 @@
+# Used by `cargo release`. Publishing is done by .github/workflows/release.yml
+# when the pushed v* tag arrives, so cargo-release only bumps, tags and pushes.
+publish = false
+tag-name = "v{{version}}"
+pre-release-commit-message = "chore(release): v{{version}}"
