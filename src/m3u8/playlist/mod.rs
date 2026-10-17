@@ -42,11 +42,12 @@ mod variables;
 
 use crate::m3u8::error::{ParseError, SyntaxError};
 use crate::m3u8::parser::{
-    attribute, optional_boolean, optional_parsed, optional_string, parse_attribute_list,
-    required_parsed, required_string, Attribute,
+    attribute, extra_attributes, optional_boolean, optional_parsed, optional_string,
+    parse_attribute_list, required_parsed, required_string, Attribute,
 };
 use crate::m3u8::tags::{ByteRange, Key, Map, Tag};
 use crate::m3u8::validation::ValidationError;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
@@ -229,10 +230,16 @@ impl Playlist {
         }
 
         for tag in &self.tags {
+            let reported = errors.len();
             self.validate_tag(tag, &mut errors);
+            // A tag already reported as invalid would only add a duplicate complaint.
+            if errors.len() == reported {
+                validate_serialization(tag, &mut errors);
+            }
         }
 
         self.validate_playlist_rules(&mut errors);
+        self.validate_structure_rules(&mut errors);
 
         if errors.is_empty() {
             Ok(())
@@ -352,6 +359,134 @@ impl Playlist {
                 errors.push(ValidationError::InvalidRenditionReportUri);
             }
             _ => {}
+        }
+    }
+
+    /// Uniqueness, grouping and ordering rules that span several tags.
+    fn validate_structure_rules(&self, errors: &mut Vec<ValidationError>) {
+        let mut previous: Option<&Tag> = None;
+        for tag in &self.tags {
+            if let Tag::Uri(uri) = tag {
+                if !matches!(previous, Some(&Tag::ExtXStreamInf { .. })) {
+                    errors.push(ValidationError::OrphanUri(uri.clone()));
+                }
+            }
+            previous = Some(tag);
+        }
+
+        let mut date_range_ids = HashSet::new();
+        let mut session_data = HashSet::new();
+        let mut renditions = HashSet::new();
+        let mut defaults = HashSet::new();
+        for tag in &self.tags {
+            match tag {
+                Tag::ExtXDateRange { id, .. } if !date_range_ids.insert(id) => {
+                    errors.push(ValidationError::DuplicateDateRangeId(id.clone()));
+                }
+                Tag::ExtXSessionData { id, language, .. }
+                    if !session_data.insert((id, language)) =>
+                {
+                    errors.push(ValidationError::DuplicateSessionData {
+                        id: id.clone(),
+                        language: language.clone(),
+                    });
+                }
+                Tag::ExtXMedia {
+                    type_,
+                    group_id,
+                    name,
+                    default,
+                    autoselect,
+                    forced,
+                    ..
+                } => {
+                    if let Some(name) = name {
+                        if !renditions.insert((type_, group_id, name)) {
+                            errors.push(ValidationError::InvalidMediaAttributes(format!(
+                                "GROUP-ID={group_id} has more than one rendition named {name}"
+                            )));
+                        }
+                    }
+                    if *default == Some(true) && !defaults.insert((type_, group_id)) {
+                        errors.push(ValidationError::InvalidMediaAttributes(format!(
+                            "GROUP-ID={group_id} has more than one DEFAULT=YES rendition"
+                        )));
+                    }
+                    if *default == Some(true) && *autoselect == Some(false) {
+                        errors.push(ValidationError::InvalidMediaAttributes(
+                            "DEFAULT=YES requires AUTOSELECT=YES when AUTOSELECT is present"
+                                .to_string(),
+                        ));
+                    }
+                    if forced.is_some() && type_ != "SUBTITLES" {
+                        errors.push(ValidationError::InvalidMediaAttributes(
+                            "FORCED is only allowed with TYPE=SUBTITLES".to_string(),
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let has_part = self
+            .tags
+            .iter()
+            .any(|tag| matches!(tag, Tag::ExtXPart { .. }));
+        let part_target = self.tags.iter().find_map(|tag| match tag {
+            Tag::ExtXPartInf {
+                part_target_duration,
+            } => Some(*part_target_duration),
+            _ => None,
+        });
+        if has_part && part_target.is_none() {
+            errors.push(ValidationError::MissingPartInf);
+        }
+
+        let target_duration = self.tags.iter().find_map(|tag| match tag {
+            Tag::ExtXTargetDuration(duration) => Some(*duration as f64),
+            _ => None,
+        });
+        for tag in &self.tags {
+            let Tag::ExtXServerControl {
+                hold_back,
+                part_hold_back,
+                ..
+            } = tag
+            else {
+                continue;
+            };
+            if let (Some(hold_back), Some(target)) = (hold_back, target_duration) {
+                if *hold_back < 3.0 * target {
+                    errors.push(ValidationError::InvalidServerControl(
+                        "HOLD-BACK must be at least three times EXT-X-TARGETDURATION".to_string(),
+                    ));
+                }
+            }
+            if let (Some(part_hold_back), Some(part_target)) = (part_hold_back, part_target) {
+                if *part_hold_back < 2.0 * part_target {
+                    errors.push(ValidationError::InvalidServerControl(
+                        "PART-HOLD-BACK must be at least twice PART-TARGET".to_string(),
+                    ));
+                }
+            }
+        }
+
+        let mut seen_segment = false;
+        for tag in &self.tags {
+            match tag {
+                Tag::ExtInf { .. } => seen_segment = true,
+                Tag::ExtXMediaSequence(_) if seen_segment => {
+                    errors.push(ValidationError::TagAfterFirstSegment(
+                        "EXT-X-MEDIA-SEQUENCE".to_string(),
+                    ));
+                }
+                Tag::ExtXDiscontinuitySequence(_) if seen_segment => {
+                    errors.push(ValidationError::TagAfterFirstSegment(
+                        "EXT-X-DISCONTINUITY-SEQUENCE".to_string(),
+                    ));
+                }
+                _ => {}
+            }
         }
     }
 
@@ -767,6 +902,20 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         video: optional_string(attributes, "VIDEO"),
         subtitle: optional_string(attributes, "SUBTITLES"),
         closed_captions: optional_string(attributes, "CLOSED-CAPTIONS"),
+        extra_attributes: extra_attributes(
+            attributes,
+            &[
+                "BANDWIDTH",
+                "AVERAGE-BANDWIDTH",
+                "CODECS",
+                "RESOLUTION",
+                "FRAME-RATE",
+                "AUDIO",
+                "VIDEO",
+                "SUBTITLES",
+                "CLOSED-CAPTIONS",
+            ],
+        ),
     })
 }
 
@@ -779,6 +928,17 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
         resolution: optional_string(attributes, "RESOLUTION"),
         frame_rate: optional_parsed(attributes, "FRAME-RATE", TAG)?,
         uri: required_string(attributes, "URI", TAG)?,
+        extra_attributes: extra_attributes(
+            attributes,
+            &[
+                "BANDWIDTH",
+                "AVERAGE-BANDWIDTH",
+                "CODECS",
+                "RESOLUTION",
+                "FRAME-RATE",
+                "URI",
+            ],
+        ),
     })
 }
 
@@ -797,6 +957,23 @@ fn parse_media(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         language_codec: optional_string(attributes, "LANGUAGE-CODEC"),
         forced: optional_boolean(attributes, "FORCED", TAG)?,
         channels: optional_string(attributes, "CHANNELS"),
+        extra_attributes: extra_attributes(
+            attributes,
+            &[
+                "TYPE",
+                "GROUP-ID",
+                "NAME",
+                "URI",
+                "DEFAULT",
+                "AUTOSELECT",
+                "CHARACTERISTICS",
+                "LANGUAGE",
+                "INSTREAM-ID",
+                "LANGUAGE-CODEC",
+                "FORCED",
+                "CHANNELS",
+            ],
+        ),
     })
 }
 
@@ -937,6 +1114,19 @@ fn is_date_time(value: &str) -> bool {
     };
 
     date_ok && fraction_ok && clock_ok && zone_ok
+}
+
+/// Writing has no escape mechanism, so a string holding a newline or a quote can
+/// change the playlist's structure. Detect that by reading the written tag back.
+fn validate_serialization(tag: &Tag, errors: &mut Vec<ValidationError>) {
+    let written = tag.to_string();
+    let round_trips = matches!(
+        format!("{written}\n").parse::<Playlist>(),
+        Ok(Playlist { tags }) if tags.len() == 1 && tags[0] == *tag
+    );
+    if !round_trips {
+        errors.push(ValidationError::UnserializableTag(written));
+    }
 }
 
 fn validate_key(key: &Key, tag: &str, errors: &mut Vec<ValidationError>) {

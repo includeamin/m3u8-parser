@@ -74,6 +74,9 @@ pub enum SubstitutionError {
     /// An EXT-X-DEFINE tag does not have exactly one of `NAME`/`VALUE`,
     /// `IMPORT`, or `QUERYPARAM`, or its name is invalid.
     InvalidDefine(String),
+    /// A variable's value contains a control character or a double quote, which
+    /// would change the structure of the playlist once substituted.
+    InvalidValue(String),
     /// The playlist could not be parsed after substitution.
     Parse(ParseError),
 }
@@ -92,6 +95,12 @@ impl fmt::Display for SubstitutionError {
                 write!(f, "variable defined more than once: {name}")
             }
             SubstitutionError::InvalidDefine(value) => write!(f, "invalid EXT-X-DEFINE: {value}"),
+            SubstitutionError::InvalidValue(name) => {
+                write!(
+                    f,
+                    "variable value contains a control character or quote: {name}"
+                )
+            }
             SubstitutionError::Parse(error) => write!(f, "{error}"),
         }
     }

@@ -24,7 +24,9 @@ by [RFC 8216](https://tools.ietf.org/html/rfc8216).
   `PROGRAM-DATE-TIME` state for each `EXTINF` segment.
 - Parses, models, and serializes every RFC 8216 tag family listed below. Standard
   tags use order-independent attribute parsing, and unsupported extension tags and
-  unknown `EXT-X-DATERANGE` attributes are preserved for round-tripping.
+  unmodeled attributes on `EXT-X-DATERANGE`, `EXT-X-STREAM-INF`,
+  `EXT-X-I-FRAME-STREAM-INF`, and `EXT-X-MEDIA` (such as `VIDEO-RANGE` and
+  `HDCP-LEVEL`) are preserved for round-tripping.
 - Typed parse errors (`ParseError`) carrying the 1-based line number and a
   matchable `SyntaxError` kind.
 - RFC 8216 semantic validation enforces `EXTM3U` placement, singleton tags,
