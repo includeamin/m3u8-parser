@@ -3,6 +3,12 @@ name: release
 on:
   push:
     tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to publish, e.g. v0.7.0
+        required: true
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,11 +18,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - name: Check tag matches crate version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+          if [ "v$version" != "$TAG" ]; then
+            echo "tag $TAG does not match Cargo.toml version $version"
             exit 1
           fi
       - name: Run tests
