@@ -1,0 +1,37 @@
+name: tag
+
+# On every push to main, tag the commit with the version from Cargo.toml if that
+# tag does not exist yet, then start the `release` workflow for it. Tags pushed
+# with the default token do not trigger other workflows, so the publish run is
+# started explicitly.
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag the version if it is new
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists; nothing to release"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "$tag"
+          git push origin "$tag"
+          gh workflow run release.yml -f tag="$tag"
+        env:
+          GH_TOKEN: ${{ github.token }}
