@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2026-10-17
+
+### 🐛 Bug Fixes
+
+- Strip a byte order mark at the start of a line so written playlists parse back identically
+- Reject a double quote inside an unquoted attribute value, which could not be written back
+
+### 🧪 Testing
+
+- Add cargo-fuzz targets for parsing and round-tripping
+
 ## [0.8.0] - 2026-10-17
 
 ### 🚀 Features

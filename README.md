@@ -78,7 +78,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-m3u8-parser = "0.8.0"
+m3u8-parser = "0.8.1"
 ```
 
 ## Usage
