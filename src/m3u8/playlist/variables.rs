@@ -53,6 +53,9 @@ impl Playlist {
             if !valid_name {
                 return Err(invalid());
             }
+            if value.chars().any(|c| c.is_control() || c == '"') {
+                return Err(SubstitutionError::InvalidValue(name));
+            }
             if variables.contains_key(&name) {
                 return Err(SubstitutionError::DuplicateVariable(name));
             }

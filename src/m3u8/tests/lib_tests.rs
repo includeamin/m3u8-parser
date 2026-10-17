@@ -2326,4 +2326,25 @@ seg2.mp4
             assert!(matches!(kind, SyntaxError::MissingTagValue { .. }));
         }
     }
+
+    #[test]
+    fn test_substitute_rejects_values_that_would_inject_tags() {
+        let playlist: Playlist = "#EXTM3U\n#EXT-X-VERSION:11\n#EXT-X-DEFINE:QUERYPARAM=\"t\"\n#EXT-X-TARGETDURATION:10\n#EXTINF:5,\n{$t}\n"
+            .parse()
+            .unwrap();
+        for query in ["t=a.ts%0A%23EXT-X-ENDLIST", "t=a%0D.ts", "t=a%22.ts"] {
+            assert!(matches!(
+                playlist.substitute_variables(&HashMap::new(), Some(query)),
+                Err(SubstitutionError::InvalidValue(name)) if name == "t"
+            ));
+        }
+        let ok = playlist
+            .substitute_variables(&HashMap::new(), Some("t=a%20b.ts"))
+            .unwrap();
+        assert!(ok.tags.contains(&Tag::ExtInf {
+            uri: "a b.ts".to_string(),
+            duration: 5.0,
+            title: None,
+        }));
+    }
 }
