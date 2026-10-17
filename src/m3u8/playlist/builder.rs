@@ -236,6 +236,7 @@ impl PlaylistBuilder {
             language_codec: language_codec.map(|s| s.to_string()),
             forced,
             channels: None,
+            extra_attributes: Vec::new(),
         })
     }
 
@@ -263,6 +264,7 @@ impl PlaylistBuilder {
             video: video.map(|s| s.to_string()),
             subtitle: subtitle.map(|s| s.to_string()),
             closed_captions: closed_captions.map(|s| s.to_string()),
+            extra_attributes: Vec::new(),
         })
     }
 
@@ -284,6 +286,7 @@ impl PlaylistBuilder {
             resolution: resolution.map(|s| s.to_string()),
             frame_rate,
             uri: uri.to_string(),
+            extra_attributes: Vec::new(),
         })
     }
 

@@ -42,8 +42,8 @@ mod variables;
 
 use crate::m3u8::error::{ParseError, SyntaxError};
 use crate::m3u8::parser::{
-    attribute, optional_boolean, optional_parsed, optional_string, parse_attribute_list,
-    required_parsed, required_string, Attribute,
+    attribute, extra_attributes, optional_boolean, optional_parsed, optional_string,
+    parse_attribute_list, required_parsed, required_string, Attribute,
 };
 use crate::m3u8::tags::{ByteRange, Key, Map, Tag};
 use crate::m3u8::validation::ValidationError;
@@ -767,6 +767,20 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         video: optional_string(attributes, "VIDEO"),
         subtitle: optional_string(attributes, "SUBTITLES"),
         closed_captions: optional_string(attributes, "CLOSED-CAPTIONS"),
+        extra_attributes: extra_attributes(
+            attributes,
+            &[
+                "BANDWIDTH",
+                "AVERAGE-BANDWIDTH",
+                "CODECS",
+                "RESOLUTION",
+                "FRAME-RATE",
+                "AUDIO",
+                "VIDEO",
+                "SUBTITLES",
+                "CLOSED-CAPTIONS",
+            ],
+        ),
     })
 }
 
@@ -779,6 +793,17 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
         resolution: optional_string(attributes, "RESOLUTION"),
         frame_rate: optional_parsed(attributes, "FRAME-RATE", TAG)?,
         uri: required_string(attributes, "URI", TAG)?,
+        extra_attributes: extra_attributes(
+            attributes,
+            &[
+                "BANDWIDTH",
+                "AVERAGE-BANDWIDTH",
+                "CODECS",
+                "RESOLUTION",
+                "FRAME-RATE",
+                "URI",
+            ],
+        ),
     })
 }
 
@@ -797,6 +822,23 @@ fn parse_media(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         language_codec: optional_string(attributes, "LANGUAGE-CODEC"),
         forced: optional_boolean(attributes, "FORCED", TAG)?,
         channels: optional_string(attributes, "CHANNELS"),
+        extra_attributes: extra_attributes(
+            attributes,
+            &[
+                "TYPE",
+                "GROUP-ID",
+                "NAME",
+                "URI",
+                "DEFAULT",
+                "AUTOSELECT",
+                "CHARACTERISTICS",
+                "LANGUAGE",
+                "INSTREAM-ID",
+                "LANGUAGE-CODEC",
+                "FORCED",
+                "CHANNELS",
+            ],
+        ),
     })
 }
 

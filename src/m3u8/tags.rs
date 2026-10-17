@@ -56,6 +56,8 @@ pub enum Tag {
         language_codec: Option<String>,
         forced: Option<bool>,
         channels: Option<String>,
+        /// Unmodeled attributes (e.g. `VIDEO-RANGE`, `HDCP-LEVEL`), in input order.
+        extra_attributes: Vec<(String, AttributeValue)>,
     },
     /// Represents stream information.
     ExtXStreamInf {
@@ -68,6 +70,8 @@ pub enum Tag {
         video: Option<String>,
         subtitle: Option<String>,
         closed_captions: Option<String>,
+        /// Unmodeled attributes (e.g. `VIDEO-RANGE`, `HDCP-LEVEL`), in input order.
+        extra_attributes: Vec<(String, AttributeValue)>,
     },
     /// Represents an I-frame stream information.
     ExtXIFrameStreamInf {
@@ -77,6 +81,8 @@ pub enum Tag {
         resolution: Option<String>,
         frame_rate: Option<f64>,
         uri: String,
+        /// Unmodeled attributes (e.g. `VIDEO-RANGE`, `HDCP-LEVEL`), in input order.
+        extra_attributes: Vec<(String, AttributeValue)>,
     },
     /// Indicates a gap in the playlist.
     ExtXGap,
@@ -251,6 +257,16 @@ impl std::fmt::Display for AttributeValue {
     }
 }
 
+fn write_extra_attributes(
+    f: &mut std::fmt::Formatter<'_>,
+    attributes: &[(String, AttributeValue)],
+) -> std::fmt::Result {
+    for (name, value) in attributes {
+        write!(f, ",{}={}", name, value)?;
+    }
+    Ok(())
+}
+
 fn yes_no(value: bool) -> &'static str {
     if value {
         "YES"
@@ -338,6 +354,7 @@ impl std::fmt::Display for Tag {
                 language_codec,
                 forced,
                 channels,
+                extra_attributes,
             } => {
                 // Basic required fields
                 write!(f, "#EXT-X-MEDIA:TYPE={},GROUP-ID=\"{}\"", type_, group_id)?;
@@ -391,7 +408,7 @@ impl std::fmt::Display for Tag {
                     write!(f, ",CHANNELS=\"{}\"", channels)?;
                 }
 
-                Ok(())
+                write_extra_attributes(f, extra_attributes)
             }
             Tag::ExtXStreamInf {
                 bandwidth,
@@ -403,6 +420,7 @@ impl std::fmt::Display for Tag {
                 video,
                 subtitle,
                 closed_captions,
+                extra_attributes,
             } => {
                 write!(f, "#EXT-X-STREAM-INF:BANDWIDTH={}", bandwidth)?;
                 if let Some(average_bandwidth) = average_bandwidth {
@@ -432,7 +450,7 @@ impl std::fmt::Display for Tag {
                     Some(closed_captions) => write!(f, ",CLOSED-CAPTIONS=\"{}\"", closed_captions)?,
                     None => {}
                 }
-                Ok(())
+                write_extra_attributes(f, extra_attributes)
             }
             Tag::ExtXIFrameStreamInf {
                 bandwidth,
@@ -441,6 +459,7 @@ impl std::fmt::Display for Tag {
                 resolution,
                 frame_rate,
                 uri,
+                extra_attributes,
             } => {
                 write!(f, "#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH={}", bandwidth)?;
                 if let Some(average_bandwidth) = average_bandwidth {
@@ -456,7 +475,7 @@ impl std::fmt::Display for Tag {
                     write!(f, ",FRAME-RATE={}", frame_rate)?;
                 }
                 write!(f, ",URI=\"{}\"", uri)?;
-                Ok(())
+                write_extra_attributes(f, extra_attributes)
             }
             Tag::ExtXGap => write!(f, "#EXT-X-GAP"),
             Tag::ExtXDateRange {
@@ -505,10 +524,7 @@ impl std::fmt::Display for Tag {
                 if let Some(scte35_in) = scte35_in {
                     write!(f, ",SCTE35-IN={}", scte35_in)?;
                 }
-                for (name, value) in extra_attributes {
-                    write!(f, ",{}={}", name, value)?;
-                }
-                Ok(())
+                write_extra_attributes(f, extra_attributes)
             }
             Tag::ExtXBitrate(bitrate) => {
                 write!(f, "#EXT-X-BITRATE:{}", bitrate)

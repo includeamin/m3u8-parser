@@ -156,3 +156,22 @@ pub(crate) fn required_parsed<T: std::str::FromStr>(
         attribute: name,
     })
 }
+
+/// Collects the attributes not named in `known`, preserving order and quoting.
+pub(crate) fn extra_attributes(
+    attributes: &[Attribute],
+    known: &[&str],
+) -> Vec<(String, AttributeValue)> {
+    attributes
+        .iter()
+        .filter(|attribute| !known.contains(&attribute.name.as_str()))
+        .map(|attribute| {
+            let value = if attribute.quoted {
+                AttributeValue::Quoted(attribute.value.clone())
+            } else {
+                AttributeValue::Unquoted(attribute.value.clone())
+            };
+            (attribute.name.clone(), value)
+        })
+        .collect()
+}

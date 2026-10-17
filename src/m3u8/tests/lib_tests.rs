@@ -193,6 +193,7 @@ main.m3u8
                     language_codec: None,
                     forced: None,
                     channels: None,
+                    extra_attributes: Vec::new(),
                 },
             ],
         };
@@ -1123,6 +1124,7 @@ https://media.example.com/third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    extra_attributes: Vec::new(),
                 },
                 Tag::Uri("variant.m3u8".to_string()),
                 Tag::ExtXTargetDuration(6),
@@ -1155,6 +1157,7 @@ https://media.example.com/third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    extra_attributes: Vec::new(),
                 },
             ],
         };
@@ -1323,6 +1326,7 @@ https://media.example.com/third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    extra_attributes: Vec::new(),
                 },
                 Tag::Uri("variant.m3u8".to_string()),
             ],
@@ -1356,6 +1360,7 @@ https://media.example.com/third.ts
                     language_codec: None,
                     forced: None,
                     channels: None,
+                    extra_attributes: Vec::new(),
                 },
                 Tag::ExtXStreamInf {
                     bandwidth: 1_000_000,
@@ -1367,6 +1372,7 @@ https://media.example.com/third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    extra_attributes: Vec::new(),
                 },
                 Tag::Uri("variant.m3u8".to_string()),
             ],
@@ -1608,6 +1614,7 @@ third.ts
             language_codec: None,
             forced: None,
             channels: None,
+            extra_attributes: Vec::new(),
         };
         let playlist = Playlist {
             tags: vec![
@@ -1719,6 +1726,7 @@ third.ts
             language_codec: None,
             forced: None,
             channels: None,
+            extra_attributes: Vec::new(),
         }
     }
 
@@ -1743,6 +1751,7 @@ third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    extra_attributes: Vec::new(),
                 },
                 Tag::Uri("variant.m3u8".to_string()),
             ],
@@ -2346,5 +2355,22 @@ seg2.mp4
             duration: 5.0,
             title: None,
         }));
+    }
+
+    #[test]
+    fn test_unmodeled_attributes_round_trip_on_variant_and_media_tags() {
+        let data = "#EXTM3U\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"x\",ASSOC-LANGUAGE=\"en\",SAMPLE-RATE=48000\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1000,CODECS=\"hvc1\",VIDEO-RANGE=PQ,HDCP-LEVEL=TYPE-1,SCORE=1.5\n\
+v.m3u8\n\
+#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=100,URI=\"i.m3u8\",VIDEO-RANGE=PQ\n";
+        let playlist: Playlist = data.parse().unwrap();
+        assert!(playlist.tags.iter().any(|tag| matches!(
+            tag,
+            Tag::ExtXStreamInf { extra_attributes, .. }
+                if extra_attributes[0] == ("VIDEO-RANGE".to_string(), AttributeValue::Unquoted("PQ".to_string()))
+                    && extra_attributes.len() == 3
+        )));
+        assert_eq!(playlist.to_string(), data.replace("\\\n", ""));
     }
 }
