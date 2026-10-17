@@ -2373,4 +2373,48 @@ v.m3u8\n\
         )));
         assert_eq!(playlist.to_string(), data.replace("\\\n", ""));
     }
+
+    #[test]
+    fn test_validate_rejects_strings_that_break_serialization() {
+        let injected = PlaylistBuilder::new()
+            .extm3u()
+            .target_duration(10)
+            .extinf("a.ts\n#EXT-X-ENDLIST", 5.0, None)
+            .build();
+        assert!(matches!(
+            injected.unwrap_err().as_slice(),
+            [ValidationError::UnserializableTag(_)]
+        ));
+
+        let quoted = PlaylistBuilder::new()
+            .extm3u()
+            .media(
+                "AUDIO",
+                "a",
+                Some("x\",DEFAULT=YES,FOO=\"y"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .build();
+        assert!(matches!(
+            quoted.unwrap_err().as_slice(),
+            [ValidationError::UnserializableTag(_)]
+        ));
+    }
+
+    #[test]
+    fn test_validate_accepts_parsed_playlist_sample() {
+        let playlist = Playlist::from_file("src/m3u8/tests/test_data/playlist.m3u8").unwrap();
+        if let Err(errors) = playlist.validate() {
+            assert!(!errors
+                .iter()
+                .any(|error| matches!(error, ValidationError::UnserializableTag(_))));
+        }
+    }
 }

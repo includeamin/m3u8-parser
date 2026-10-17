@@ -229,7 +229,12 @@ impl Playlist {
         }
 
         for tag in &self.tags {
+            let reported = errors.len();
             self.validate_tag(tag, &mut errors);
+            // A tag already reported as invalid would only add a duplicate complaint.
+            if errors.len() == reported {
+                validate_serialization(tag, &mut errors);
+            }
         }
 
         self.validate_playlist_rules(&mut errors);
@@ -979,6 +984,19 @@ fn is_date_time(value: &str) -> bool {
     };
 
     date_ok && fraction_ok && clock_ok && zone_ok
+}
+
+/// Writing has no escape mechanism, so a string holding a newline or a quote can
+/// change the playlist's structure. Detect that by reading the written tag back.
+fn validate_serialization(tag: &Tag, errors: &mut Vec<ValidationError>) {
+    let written = tag.to_string();
+    let round_trips = matches!(
+        format!("{written}\n").parse::<Playlist>(),
+        Ok(Playlist { tags }) if tags.len() == 1 && tags[0] == *tag
+    );
+    if !round_trips {
+        errors.push(ValidationError::UnserializableTag(written));
+    }
 }
 
 fn validate_key(key: &Key, tag: &str, errors: &mut Vec<ValidationError>) {
