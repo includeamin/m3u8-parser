@@ -66,7 +66,7 @@ pub enum Tag {
         bandwidth: u32,
         average_bandwidth: Option<u32>,
         codecs: Option<String>,
-        resolution: Option<String>,
+        resolution: Option<Resolution>,
         frame_rate: Option<f64>,
         audio: Option<String>,
         video: Option<String>,
@@ -82,7 +82,7 @@ pub enum Tag {
         bandwidth: u32,
         average_bandwidth: Option<u32>,
         codecs: Option<String>,
-        resolution: Option<String>,
+        resolution: Option<Resolution>,
         frame_rate: Option<f64>,
         uri: String,
         /// Content steering pathway this variant belongs to.
@@ -178,6 +178,40 @@ pub enum Tag {
     Uri(String),
     /// An unrecognized tag, preserved without the leading `#`.
     Unknown(String),
+}
+
+/// A display resolution in `<width>x<height>` form, from the RESOLUTION attribute.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Resolution {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+}
+
+impl std::fmt::Display for Resolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}x{}", self.width, self.height)
+    }
+}
+
+impl std::str::FromStr for Resolution {
+    type Err = ();
+
+    /// Parses `<width>x<height>`, where both are plain decimal integers.
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (width, height) = value.split_once('x').ok_or(())?;
+        let decimal = |part: &str| {
+            if part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_digit()) {
+                return Err(());
+            }
+            part.parse().map_err(|_| ())
+        };
+        Ok(Resolution {
+            width: decimal(width)?,
+            height: decimal(height)?,
+        })
+    }
 }
 
 /// The mutability of a Media Playlist, from EXT-X-PLAYLIST-TYPE.
