@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] - 2026-11-22
+
+### 🚀 Features
+
+- Add `Playlist::total_duration` for the summed `EXTINF` durations
+- Add `Playlist::variants` and `variants_by_bandwidth`, returning `Variant` values for each `EXT-X-STREAM-INF` and its URI
+- Add `Playlist::renditions` and `renditions_in_group`, returning `Rendition` values for `EXT-X-MEDIA` tags
+
 ## [0.11.0] - 2026-11-22
 
 ### 🚀 Features
