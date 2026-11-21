@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-11-22
+
+### 🚀 Features
+
+- [**breaking**] Type `EXT-X-PLAYLIST-TYPE` as `PlaylistType` and `METHOD` as `KeyMethod`; `PlaylistBuilder::key`, `session_key` and `playlist_type` take the new types
+- [**breaking**] Type `RESOLUTION` as `Resolution { width, height }` on `ExtXStreamInf` and `ExtXIFrameStreamInf`; malformed values are now a syntax error, and `PlaylistBuilder::stream_inf` and `iframe_stream_inf` take `Option<Resolution>`
+
 ## [0.10.0] - 2026-11-21
 
 ### 🚀 Features
