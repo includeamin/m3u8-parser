@@ -251,6 +251,20 @@ impl Playlist {
     }
 
     fn validate_tag(&self, tag: &Tag, errors: &mut Vec<ValidationError>) {
+        if let Tag::ExtXMedia { pathway_id, .. }
+        | Tag::ExtXStreamInf { pathway_id, .. }
+        | Tag::ExtXIFrameStreamInf { pathway_id, .. } = tag
+        {
+            if pathway_id
+                .as_deref()
+                .is_some_and(|id| !is_valid_pathway_id(id))
+            {
+                errors.push(ValidationError::InvalidContentSteering(format!(
+                    "PATHWAY-ID on {} must be non-empty and use only A-Z, a-z, 0-9, '.', '-' and '_'",
+                    tag_name(tag)
+                )));
+            }
+        }
         match tag {
             Tag::ExtXVersion(version) => {
                 if *version < 1 || *version > MAX_VERSION {
@@ -924,6 +938,7 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         video: optional_string(attributes, "VIDEO"),
         subtitle: optional_string(attributes, "SUBTITLES"),
         closed_captions: optional_string(attributes, "CLOSED-CAPTIONS"),
+        pathway_id: optional_string(attributes, "PATHWAY-ID"),
         extra_attributes: extra_attributes(
             attributes,
             &[
@@ -936,6 +951,7 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
                 "VIDEO",
                 "SUBTITLES",
                 "CLOSED-CAPTIONS",
+                "PATHWAY-ID",
             ],
         ),
     })
@@ -950,6 +966,7 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
         resolution: optional_string(attributes, "RESOLUTION"),
         frame_rate: optional_parsed(attributes, "FRAME-RATE", TAG)?,
         uri: required_string(attributes, "URI", TAG)?,
+        pathway_id: optional_string(attributes, "PATHWAY-ID"),
         extra_attributes: extra_attributes(
             attributes,
             &[
@@ -959,6 +976,7 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
                 "RESOLUTION",
                 "FRAME-RATE",
                 "URI",
+                "PATHWAY-ID",
             ],
         ),
     })
@@ -979,6 +997,7 @@ fn parse_media(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         language_codec: optional_string(attributes, "LANGUAGE-CODEC"),
         forced: optional_boolean(attributes, "FORCED", TAG)?,
         channels: optional_string(attributes, "CHANNELS"),
+        pathway_id: optional_string(attributes, "PATHWAY-ID"),
         extra_attributes: extra_attributes(
             attributes,
             &[
@@ -994,6 +1013,7 @@ fn parse_media(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
                 "LANGUAGE-CODEC",
                 "FORCED",
                 "CHANNELS",
+                "PATHWAY-ID",
             ],
         ),
     })

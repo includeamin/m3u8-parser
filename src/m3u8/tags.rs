@@ -56,6 +56,8 @@ pub enum Tag {
         language_codec: Option<String>,
         forced: Option<bool>,
         channels: Option<String>,
+        /// Content steering pathway this rendition belongs to.
+        pathway_id: Option<String>,
         /// Unmodeled attributes (e.g. `VIDEO-RANGE`, `HDCP-LEVEL`), in input order.
         extra_attributes: Vec<(String, AttributeValue)>,
     },
@@ -70,6 +72,8 @@ pub enum Tag {
         video: Option<String>,
         subtitle: Option<String>,
         closed_captions: Option<String>,
+        /// Content steering pathway this variant belongs to.
+        pathway_id: Option<String>,
         /// Unmodeled attributes (e.g. `VIDEO-RANGE`, `HDCP-LEVEL`), in input order.
         extra_attributes: Vec<(String, AttributeValue)>,
     },
@@ -81,6 +85,8 @@ pub enum Tag {
         resolution: Option<String>,
         frame_rate: Option<f64>,
         uri: String,
+        /// Content steering pathway this variant belongs to.
+        pathway_id: Option<String>,
         /// Unmodeled attributes (e.g. `VIDEO-RANGE`, `HDCP-LEVEL`), in input order.
         extra_attributes: Vec<(String, AttributeValue)>,
     },
@@ -361,6 +367,7 @@ impl std::fmt::Display for Tag {
                 language_codec,
                 forced,
                 channels,
+                pathway_id,
                 extra_attributes,
             } => {
                 // Basic required fields
@@ -415,6 +422,10 @@ impl std::fmt::Display for Tag {
                     write!(f, ",CHANNELS=\"{}\"", channels)?;
                 }
 
+                if let Some(pathway_id) = pathway_id {
+                    write!(f, ",PATHWAY-ID=\"{}\"", pathway_id)?;
+                }
+
                 write_extra_attributes(f, extra_attributes)
             }
             Tag::ExtXStreamInf {
@@ -427,6 +438,7 @@ impl std::fmt::Display for Tag {
                 video,
                 subtitle,
                 closed_captions,
+                pathway_id,
                 extra_attributes,
             } => {
                 write!(f, "#EXT-X-STREAM-INF:BANDWIDTH={}", bandwidth)?;
@@ -457,6 +469,9 @@ impl std::fmt::Display for Tag {
                     Some(closed_captions) => write!(f, ",CLOSED-CAPTIONS=\"{}\"", closed_captions)?,
                     None => {}
                 }
+                if let Some(pathway_id) = pathway_id {
+                    write!(f, ",PATHWAY-ID=\"{}\"", pathway_id)?;
+                }
                 write_extra_attributes(f, extra_attributes)
             }
             Tag::ExtXIFrameStreamInf {
@@ -466,6 +481,7 @@ impl std::fmt::Display for Tag {
                 resolution,
                 frame_rate,
                 uri,
+                pathway_id,
                 extra_attributes,
             } => {
                 write!(f, "#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH={}", bandwidth)?;
@@ -482,6 +498,9 @@ impl std::fmt::Display for Tag {
                     write!(f, ",FRAME-RATE={}", frame_rate)?;
                 }
                 write!(f, ",URI=\"{}\"", uri)?;
+                if let Some(pathway_id) = pathway_id {
+                    write!(f, ",PATHWAY-ID=\"{}\"", pathway_id)?;
+                }
                 write_extra_attributes(f, extra_attributes)
             }
             Tag::ExtXGap => write!(f, "#EXT-X-GAP"),

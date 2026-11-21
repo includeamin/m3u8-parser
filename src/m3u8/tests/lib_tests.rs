@@ -181,6 +181,7 @@ main.m3u8
                 Tag::ExtM3U,
                 Tag::ExtXVersion(6),
                 Tag::ExtXMedia {
+                    pathway_id: None,
                     type_: "AUDIO".to_string(),
                     group_id: "audio".to_string(),
                     name: None,
@@ -1115,6 +1116,7 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(6),
                 Tag::ExtXStreamInf {
+                    pathway_id: None,
                     bandwidth: 1_000_000,
                     average_bandwidth: None,
                     codecs: None,
@@ -1148,6 +1150,7 @@ https://media.example.com/third.ts
             tags: vec![
                 Tag::ExtM3U,
                 Tag::ExtXStreamInf {
+                    pathway_id: None,
                     bandwidth: 1_000_000,
                     average_bandwidth: None,
                     codecs: None,
@@ -1317,6 +1320,7 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(6),
                 Tag::ExtXStreamInf {
+                    pathway_id: None,
                     bandwidth: 1_000_000,
                     average_bandwidth: None,
                     codecs: None,
@@ -1348,6 +1352,7 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(6),
                 Tag::ExtXMedia {
+                    pathway_id: None,
                     type_: "AUDIO".to_string(),
                     group_id: "audio-main".to_string(),
                     name: Some("English".to_string()),
@@ -1363,6 +1368,7 @@ https://media.example.com/third.ts
                     extra_attributes: Vec::new(),
                 },
                 Tag::ExtXStreamInf {
+                    pathway_id: None,
                     bandwidth: 1_000_000,
                     average_bandwidth: None,
                     codecs: None,
@@ -1603,6 +1609,7 @@ third.ts
     fn test_validate_closed_captions_media_rules() {
         let media = |type_: &str, name: &str, uri: Option<&str>, instream_id: Option<&str>| {
             Tag::ExtXMedia {
+                pathway_id: None,
                 type_: type_.to_string(),
                 group_id: "group".to_string(),
                 name: Some(name.to_string()),
@@ -1716,6 +1723,7 @@ third.ts
 
     fn media_tag(type_: &str, instream_id: Option<&str>) -> Tag {
         Tag::ExtXMedia {
+            pathway_id: None,
             type_: type_.to_string(),
             group_id: "group".to_string(),
             name: Some("name".to_string()),
@@ -1744,6 +1752,7 @@ third.ts
                 },
                 media_tag("AUDIO", None),
                 Tag::ExtXStreamInf {
+                    pathway_id: None,
                     bandwidth: 1_000_000,
                     average_bandwidth: Some(900_000),
                     codecs: None,
@@ -2503,6 +2512,52 @@ v.m3u8\n\
             "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXT-X-CONTENT-STEERING:SERVER-URI=\"https://a\"\n#EXTINF:6,\nseg.ts\n",
         );
         assert!(errors.contains(&ValidationError::MixedPlaylistTypes));
+    }
+
+    #[test]
+    fn test_pathway_id_is_typed_on_stream_and_media_tags() {
+        let data = "#EXTM3U\n\
+#EXT-X-CONTENT-STEERING:SERVER-URI=\"https://example.com/steer\",PATHWAY-ID=\"CDN-A\"\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",URI=\"a.m3u8\",NAME=\"en\",PATHWAY-ID=\"CDN-B\"\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO=\"a\",PATHWAY-ID=\"CDN-A\"\n\
+v.m3u8\n\
+#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=100,URI=\"i.m3u8\",PATHWAY-ID=\"CDN-B\"\n";
+        let playlist: Playlist = data.parse().unwrap();
+        let pathways: Vec<_> = playlist
+            .tags
+            .iter()
+            .filter_map(|tag| match tag {
+                Tag::ExtXMedia {
+                    pathway_id,
+                    extra_attributes,
+                    ..
+                }
+                | Tag::ExtXStreamInf {
+                    pathway_id,
+                    extra_attributes,
+                    ..
+                }
+                | Tag::ExtXIFrameStreamInf {
+                    pathway_id,
+                    extra_attributes,
+                    ..
+                } => {
+                    assert!(extra_attributes.is_empty());
+                    pathway_id.as_deref()
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(pathways, ["CDN-B", "CDN-A", "CDN-B"]);
+        assert_eq!(playlist.to_string(), data);
+        assert_eq!(playlist.validate(), Ok(()));
+
+        let errors = validation_errors(
+            "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000,PATHWAY-ID=\"bad id\"\nv.m3u8\n",
+        );
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::InvalidContentSteering(_))));
     }
 
     #[test]
