@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-11-21
+
+### 🚀 Features
+
+- Support `EXT-X-CONTENT-STEERING` with `Tag::ExtXContentSteering` and `PlaylistBuilder::content_steering`
+- [**breaking**] Add a typed `pathway_id` field to `ExtXStreamInf`, `ExtXIFrameStreamInf` and `ExtXMedia`; `PATHWAY-ID` is no longer kept in `extra_attributes`
+- Validate content steering: master playlist tag, single occurrence, non-empty `SERVER-URI` and `PATHWAY-ID` characters, reported as the new `ValidationError::InvalidContentSteering`
+
 ## [0.8.1] - 2026-10-17
 
 ### 🐛 Bug Fixes
