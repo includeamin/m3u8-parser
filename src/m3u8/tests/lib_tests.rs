@@ -2453,6 +2453,59 @@ v.m3u8\n\
     }
 
     #[test]
+    fn test_content_steering_round_trip_and_builder() {
+        let data = "#EXTM3U\n#EXT-X-CONTENT-STEERING:SERVER-URI=\"https://example.com/steer?a=1\",PATHWAY-ID=\"CDN-A\"\n";
+        let playlist: Playlist = data.parse().unwrap();
+        assert_eq!(
+            playlist.tags[1],
+            Tag::ExtXContentSteering {
+                server_uri: "https://example.com/steer?a=1".to_string(),
+                pathway_id: Some("CDN-A".to_string()),
+            }
+        );
+        assert_eq!(playlist.to_string(), data);
+        assert_eq!(playlist.validate(), Ok(()));
+
+        let built = PlaylistBuilder::new()
+            .extm3u()
+            .content_steering("https://example.com/steer", None)
+            .build()
+            .unwrap();
+        assert_eq!(
+            built.to_string(),
+            "#EXTM3U\n#EXT-X-CONTENT-STEERING:SERVER-URI=\"https://example.com/steer\"\n"
+        );
+    }
+
+    #[test]
+    fn test_content_steering_errors_and_validation() {
+        assert!(matches!(
+            syntax_error("#EXTM3U\n#EXT-X-CONTENT-STEERING:PATHWAY-ID=\"a\"\n").1,
+            SyntaxError::MissingAttribute { .. }
+        ));
+        assert!(matches!(
+            syntax_error("#EXTM3U\n#EXT-X-CONTENT-STEERING\n").1,
+            SyntaxError::MissingTagValue { .. }
+        ));
+
+        let errors = validation_errors(
+            "#EXTM3U\n#EXT-X-CONTENT-STEERING:SERVER-URI=\"https://a\",PATHWAY-ID=\"bad id!\"\n\
+#EXT-X-CONTENT-STEERING:SERVER-URI=\"https://b\"\n",
+        );
+        assert!(errors.contains(&ValidationError::DuplicateTag(
+            "EXT-X-CONTENT-STEERING".to_string()
+        )));
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::InvalidContentSteering(_))));
+
+        let errors = validation_errors(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXT-X-CONTENT-STEERING:SERVER-URI=\"https://a\"\n#EXTINF:6,\nseg.ts\n",
+        );
+        assert!(errors.contains(&ValidationError::MixedPlaylistTypes));
+    }
+
+    #[test]
     fn test_validate_media_group_rules() {
         let media =
             |attributes: &str| format!("#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"g\",{attributes}\n");

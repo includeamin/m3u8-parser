@@ -318,6 +318,14 @@ impl PlaylistBuilder {
         })
     }
 
+    /// Adds an `ExtXContentSteering` tag.
+    pub fn content_steering(self, server_uri: &str, pathway_id: Option<&str>) -> Self {
+        self.tag(Tag::ExtXContentSteering {
+            server_uri: server_uri.to_string(),
+            pathway_id: pathway_id.map(|s| s.to_string()),
+        })
+    }
+
     /// Adds an `ExtXSessionKey` tag.
     pub fn session_key(self, method: &str, uri: Option<&str>, iv: Option<&str>) -> Self {
         self.tag(Tag::ExtXSessionKey(Key {

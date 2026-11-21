@@ -161,6 +161,13 @@ pub enum Tag {
     },
     /// Encryption key information for a Master Playlist.
     ExtXSessionKey(Key),
+    /// Content steering information for a Master Playlist.
+    ExtXContentSteering {
+        /// URI of the steering server.
+        server_uri: String,
+        /// The pathway the client starts on, before it contacts the steering server.
+        pathway_id: Option<String>,
+    },
     /// A URI line associated with a preceding tag or playlist entry.
     Uri(String),
     /// An unrecognized tag, preserved without the leading `#`.
@@ -655,6 +662,16 @@ impl std::fmt::Display for Tag {
                 Ok(())
             }
             Tag::ExtXSessionKey(key) => write!(f, "#EXT-X-SESSION-KEY:{}", key),
+            Tag::ExtXContentSteering {
+                server_uri,
+                pathway_id,
+            } => {
+                write!(f, "#EXT-X-CONTENT-STEERING:SERVER-URI=\"{}\"", server_uri)?;
+                if let Some(pathway_id) = pathway_id {
+                    write!(f, ",PATHWAY-ID=\"{}\"", pathway_id)?;
+                }
+                Ok(())
+            }
             Tag::ExtXPlaylistType(playlist_type) => {
                 write!(f, "#EXT-X-PLAYLIST-TYPE:{}", playlist_type)?;
                 Ok(())

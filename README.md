@@ -67,6 +67,7 @@ by draft-pantos-hls-rfc8216bis.
         - `#EXT-X-INDEPENDENT-SEGMENTS`
         - `#EXT-X-START`
         - `#EXT-X-DEFINE`
+        - `#EXT-X-CONTENT-STEERING` (from draft-pantos-hls-rfc8216bis)
 - Low-latency and draft extension tags from draft-pantos-hls-rfc8216bis:
   `#EXT-X-PART`, `#EXT-X-PART-INF`, `#EXT-X-PRELOAD-HINT`,
   `#EXT-X-RENDITION-REPORT`, `#EXT-X-SERVER-CONTROL`, `#EXT-X-SKIP`, and
