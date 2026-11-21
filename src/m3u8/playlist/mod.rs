@@ -38,6 +38,7 @@
 //! - `validate(&self) -> Result<(), Vec<ValidationError>>`: Validates the playlist according to RFC 8216, returning any validation errors.
 
 pub mod builder;
+mod resolve;
 mod variables;
 
 use crate::m3u8::error::{ParseError, SyntaxError};

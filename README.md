@@ -18,6 +18,8 @@ by draft-pantos-hls-rfc8216bis.
   (`Display`/`FromStr`), files, or any `std::io::Write`
 - Resolve `EXT-X-DEFINE` variables (`NAME`/`VALUE`, `IMPORT`, `QUERYPARAM`)
   with `Playlist::substitute_variables`
+- Resolve relative URIs against a base URL with `Playlist::resolve_uris` or
+  `uri::resolve_uri` (RFC 3986 section 5, no extra dependencies)
 - Typed attribute values such as `ByteRange`, `Key`, `Map`, and numeric
   `TIME-OFFSET`, with `f64` durations
 - Derive `MediaSegment` values from a playlist with the media sequence number,
