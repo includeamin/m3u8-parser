@@ -2779,6 +2779,54 @@ https://cdn.example.com/v/v.m3u8\n"
     }
 
     #[test]
+    fn test_total_duration_variants_and_renditions() {
+        let media: Playlist =
+            "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:5.5,\na.ts\n#EXT-X-GAP\n#EXTINF:4,\nb.ts\n"
+                .parse()
+                .unwrap();
+        assert_eq!(media.total_duration(), 9.5);
+        assert_eq!(Playlist { tags: vec![] }.total_duration(), 0.0);
+        assert!(media.variants().is_empty());
+
+        let master: Playlist = "#EXTM3U\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"English\",LANGUAGE=\"en\",DEFAULT=YES,AUTOSELECT=YES,URI=\"en.m3u8\"\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"French\",LANGUAGE=\"fr\",URI=\"fr.m3u8\"\n\
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"aud\",NAME=\"Subs\",URI=\"s.m3u8\"\n\
+#EXT-X-STREAM-INF:BANDWIDTH=3000,RESOLUTION=1280x720,AUDIO=\"aud\",CODECS=\"avc1.4d401f\"\n\
+hi.m3u8\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO=\"aud\"\n\
+lo.m3u8\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AVERAGE-BANDWIDTH=900\n\
+lo2.m3u8\n"
+            .parse()
+            .unwrap();
+        let uris: Vec<_> = master.variants().into_iter().map(|v| v.uri).collect();
+        assert_eq!(uris, ["hi.m3u8", "lo.m3u8", "lo2.m3u8"]);
+        let sorted = master.variants_by_bandwidth();
+        let uris: Vec<_> = sorted.iter().map(|v| v.uri.as_str()).collect();
+        assert_eq!(uris, ["lo.m3u8", "lo2.m3u8", "hi.m3u8"]);
+        assert_eq!(
+            sorted[2].resolution,
+            Some(Resolution {
+                width: 1280,
+                height: 720
+            })
+        );
+        assert_eq!(sorted[2].audio.as_deref(), Some("aud"));
+        assert_eq!(sorted[1].average_bandwidth, Some(900));
+
+        assert_eq!(master.renditions().len(), 3);
+        let audio = master.renditions_in_group("AUDIO", "aud");
+        assert_eq!(audio.len(), 2);
+        assert!(audio[0].default && audio[0].autoselect && !audio[1].default);
+        assert_eq!(audio[1].language.as_deref(), Some("fr"));
+        assert!(master.renditions_in_group("AUDIO", "other").is_empty());
+
+        let dangling: Playlist = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n".parse().unwrap();
+        assert!(dangling.variants().is_empty());
+    }
+
+    #[test]
     fn test_validate_media_group_rules() {
         let media =
             |attributes: &str| format!("#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"g\",{attributes}\n");

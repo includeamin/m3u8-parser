@@ -20,6 +20,8 @@ by draft-pantos-hls-rfc8216bis.
   with `Playlist::substitute_variables`
 - Resolve relative URIs against a base URL with `Playlist::resolve_uris` or
   `uri::resolve_uri` (RFC 3986 section 5, no extra dependencies)
+- Convenience views: `total_duration`, `variants`, `variants_by_bandwidth`,
+  `renditions` and `renditions_in_group`
 - Typed attribute values such as `ByteRange`, `Key`, `Map`, `KeyMethod`,
   `PlaylistType`, `Resolution`, and numeric `TIME-OFFSET`, with `f64` durations
 - Derive `MediaSegment` values from a playlist with the media sequence number,
