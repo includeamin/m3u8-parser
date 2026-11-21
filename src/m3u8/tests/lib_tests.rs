@@ -2561,6 +2561,96 @@ v.m3u8\n\
     }
 
     #[test]
+    fn test_resolve_uri_rfc3986_examples() {
+        use crate::m3u8::uri::resolve_uri;
+        let base = "http://a/b/c/d;p?q";
+        for (reference, expected) in [
+            ("g:h", "g:h"),
+            ("g", "http://a/b/c/g"),
+            ("./g", "http://a/b/c/g"),
+            ("g/", "http://a/b/c/g/"),
+            ("/g", "http://a/g"),
+            ("//g", "http://g"),
+            ("?y", "http://a/b/c/d;p?y"),
+            ("g?y", "http://a/b/c/g?y"),
+            ("#s", "http://a/b/c/d;p?q#s"),
+            ("g#s", "http://a/b/c/g#s"),
+            ("", "http://a/b/c/d;p?q"),
+            (".", "http://a/b/c/"),
+            ("./", "http://a/b/c/"),
+            ("..", "http://a/b/"),
+            ("../", "http://a/b/"),
+            ("../g", "http://a/b/g"),
+            ("../..", "http://a/"),
+            ("../../g", "http://a/g"),
+            ("../../../g", "http://a/g"),
+            ("/./g", "http://a/g"),
+            ("g.", "http://a/b/c/g."),
+            ("./g/.", "http://a/b/c/g/"),
+            ("g/./h", "http://a/b/c/g/h"),
+            ("g/../h", "http://a/b/c/h"),
+            ("http:g", "http:g"),
+        ] {
+            assert_eq!(
+                resolve_uri(base, reference).unwrap(),
+                expected,
+                "{reference}"
+            );
+        }
+        assert_eq!(
+            resolve_uri("https://example.com", "x.ts").unwrap(),
+            "https://example.com/x.ts"
+        );
+        for bad in ["relative/path", "", "https://a/b c", "https://a/\"b"] {
+            assert!(resolve_uri(bad, "x").is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn test_resolve_uris_in_playlist() {
+        use crate::m3u8::error::UriError;
+        let playlist: Playlist = "#EXTM3U\n\
+#EXT-X-CONTENT-STEERING:SERVER-URI=\"/steer\"\n\
+#EXT-X-SESSION-KEY:METHOD=AES-128,URI=\"k/s.key\"\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"en\",URI=\"audio/en.m3u8\"\n\
+#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS,GROUP-ID=\"c\",NAME=\"cc\",INSTREAM-ID=\"CC1\"\n\
+#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=1,URI=\"i.m3u8\"\n\
+#EXT-X-STREAM-INF:BANDWIDTH=2,AUDIO=\"a\"\n\
+../v/v.m3u8\n"
+            .parse()
+            .unwrap();
+        let resolved = playlist
+            .resolve_uris("https://cdn.example.com/m/master.m3u8?token=1")
+            .unwrap();
+        assert_eq!(
+            resolved.to_string(),
+            "#EXTM3U\n\
+#EXT-X-CONTENT-STEERING:SERVER-URI=\"https://cdn.example.com/steer\"\n\
+#EXT-X-SESSION-KEY:METHOD=AES-128,URI=\"https://cdn.example.com/m/k/s.key\"\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",URI=\"https://cdn.example.com/m/audio/en.m3u8\",NAME=\"en\"\n\
+#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS,GROUP-ID=\"c\",NAME=\"cc\",INSTREAM-ID=\"CC1\"\n\
+#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=1,URI=\"https://cdn.example.com/m/i.m3u8\"\n\
+#EXT-X-STREAM-INF:BANDWIDTH=2,AUDIO=\"a\"\n\
+https://cdn.example.com/v/v.m3u8\n"
+        );
+
+        let media: Playlist = "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:6\n\
+#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:6,\nseg/1.ts\n#EXTINF:6,\nhttps://other/2.ts\n"
+            .parse()
+            .unwrap();
+        let resolved = media.resolve_uris("https://a.example/live/x.m3u8").unwrap();
+        let segments = resolved.media_segments();
+        assert_eq!(segments[0].uri, "https://a.example/live/seg/1.ts");
+        assert_eq!(segments[1].uri, "https://other/2.ts");
+        assert_eq!(resolved.validate(), Ok(()));
+
+        assert_eq!(
+            media.resolve_uris("live/x.m3u8"),
+            Err(UriError::InvalidBase("live/x.m3u8".to_string()))
+        );
+    }
+
+    #[test]
     fn test_validate_media_group_rules() {
         let media =
             |attributes: &str| format!("#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"g\",{attributes}\n");

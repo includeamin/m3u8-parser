@@ -59,6 +59,25 @@ impl From<io::Error> for ParseError {
     }
 }
 
+/// An error encountered while resolving URIs against a base URI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum UriError {
+    /// The base is not an absolute URI, or contains whitespace, control
+    /// characters, or a double quote.
+    InvalidBase(String),
+}
+
+impl fmt::Display for UriError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UriError::InvalidBase(base) => write!(f, "invalid base URI: {base:?}"),
+        }
+    }
+}
+
+impl std::error::Error for UriError {}
+
 /// An error encountered while substituting EXT-X-DEFINE variables.
 #[derive(Debug)]
 #[non_exhaustive]
