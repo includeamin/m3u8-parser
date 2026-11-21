@@ -35,9 +35,11 @@
 //! - `write_to_file<P: AsRef<Path>>(&self, path: P) -> io::Result<()>`: Writes the playlist to a specified file.
 //! - `Display` and `FromStr` convert a playlist to and from a string.
 //! - `media_segments(&self) -> Vec<MediaSegment>`: Returns the media segments with their effective state.
+//! - `total_duration`, `variants`, `variants_by_bandwidth`, `renditions` and `renditions_in_group`: Read-only views over durations, variant streams and renditions.
 //! - `validate(&self) -> Result<(), Vec<ValidationError>>`: Validates the playlist according to RFC 8216, returning any validation errors.
 
 pub mod builder;
+mod helpers;
 mod resolve;
 mod variables;
 
@@ -63,6 +65,8 @@ type TagPredicate = fn(&Tag) -> bool;
 pub struct Playlist {
     pub tags: Vec<Tag>,
 }
+
+pub use helpers::{Rendition, Variant};
 
 /// A media segment and the state established by preceding Media Playlist tags.
 #[derive(Debug, PartialEq, Clone)]
