@@ -3,7 +3,9 @@ mod tests {
     use crate::m3u8::error::{ParseError, SubstitutionError, SyntaxError};
     use crate::m3u8::playlist::builder::PlaylistBuilder;
     use crate::m3u8::playlist::Playlist;
-    use crate::m3u8::tags::{AttributeValue, ByteRange, Key, KeyMethod, Map, PlaylistType, Tag};
+    use crate::m3u8::tags::{
+        AttributeValue, ByteRange, Key, KeyMethod, Map, PlaylistType, Resolution, Tag,
+    };
     use crate::m3u8::validation::ValidationError;
     use std::collections::HashMap;
     use std::io::Write;
@@ -2102,7 +2104,10 @@ media.mp4
                 2_000_000,
                 Some(1_800_000),
                 Some("avc1.640020,mp4a.40.2"),
-                Some("1280x720"),
+                Some(Resolution {
+                    width: 1280,
+                    height: 720,
+                }),
                 Some(30.0),
                 None,
                 None,
@@ -2695,6 +2700,82 @@ https://cdn.example.com/v/v.m3u8\n"
             .build()
             .unwrap();
         assert!(built.to_string().contains("#EXT-X-PLAYLIST-TYPE:VOD"));
+    }
+
+    #[test]
+    fn test_resolution_is_typed() {
+        let data = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000,RESOLUTION=1920x1080\nv.m3u8\n\
+#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=100,RESOLUTION=640x360,URI=\"i.m3u8\"\n";
+        let playlist: Playlist = data.parse().unwrap();
+        let resolutions: Vec<_> = playlist
+            .tags
+            .iter()
+            .filter_map(|tag| match tag {
+                Tag::ExtXStreamInf { resolution, .. }
+                | Tag::ExtXIFrameStreamInf { resolution, .. } => *resolution,
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            resolutions,
+            [
+                Resolution {
+                    width: 1920,
+                    height: 1080
+                },
+                Resolution {
+                    width: 640,
+                    height: 360
+                }
+            ]
+        );
+        assert_eq!(playlist.to_string(), data);
+        assert_eq!(playlist.validate(), Ok(()));
+
+        for bad in [
+            "1920",
+            "1920x",
+            "x1080",
+            "1920X1080",
+            "-1x5",
+            "+1x5",
+            "1x2x3",
+            "1.5x2",
+            "99999999999x1",
+        ] {
+            let data = format!("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION={bad}\nv.m3u8\n");
+            assert!(
+                matches!(
+                    syntax_error(&data).1,
+                    SyntaxError::InvalidAttributeValue {
+                        attribute: "RESOLUTION",
+                        ..
+                    }
+                ),
+                "{bad}"
+            );
+        }
+
+        let built = PlaylistBuilder::new()
+            .extm3u()
+            .stream_inf(
+                1000,
+                None,
+                None,
+                Some(Resolution {
+                    width: 1280,
+                    height: 720,
+                }),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .uri("v.m3u8")
+            .build()
+            .unwrap();
+        assert!(built.to_string().contains("RESOLUTION=1280x720"));
     }
 
     #[test]

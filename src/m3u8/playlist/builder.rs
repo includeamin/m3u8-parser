@@ -1,5 +1,5 @@
 use crate::m3u8::playlist::Playlist;
-use crate::m3u8::tags::{ByteRange, Key, KeyMethod, Map, PlaylistType, Tag};
+use crate::m3u8::tags::{ByteRange, Key, KeyMethod, Map, PlaylistType, Resolution, Tag};
 use crate::m3u8::validation::ValidationError;
 
 /// A builder for creating a `Playlist` with a chained interface.
@@ -248,7 +248,7 @@ impl PlaylistBuilder {
         bandwidth: u32,
         average_bandwidth: Option<u32>,
         codecs: Option<&str>,
-        resolution: Option<&str>,
+        resolution: Option<Resolution>,
         frame_rate: Option<f64>,
         audio: Option<&str>,
         video: Option<&str>,
@@ -259,7 +259,7 @@ impl PlaylistBuilder {
             bandwidth,
             average_bandwidth,
             codecs: codecs.map(|s| s.to_string()),
-            resolution: resolution.map(|s| s.to_string()),
+            resolution,
             frame_rate,
             audio: audio.map(|s| s.to_string()),
             video: video.map(|s| s.to_string()),
@@ -277,7 +277,7 @@ impl PlaylistBuilder {
         bandwidth: u32,
         average_bandwidth: Option<u32>,
         codecs: Option<&str>,
-        resolution: Option<&str>,
+        resolution: Option<Resolution>,
         frame_rate: Option<f64>,
         uri: &str,
     ) -> Self {
@@ -285,7 +285,7 @@ impl PlaylistBuilder {
             bandwidth,
             average_bandwidth,
             codecs: codecs.map(|s| s.to_string()),
-            resolution: resolution.map(|s| s.to_string()),
+            resolution,
             frame_rate,
             uri: uri.to_string(),
             pathway_id: None,
