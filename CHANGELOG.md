@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-11-21
+
+### 🚀 Features
+
+- Resolve relative URIs against a base URI with `Playlist::resolve_uris` and `uri::resolve_uri`, following RFC 3986 section 5 with no new dependencies
+- Add `UriError::InvalidBase` for bases that are not absolute URIs
+
 ## [0.9.0] - 2026-11-21
 
 ### 🚀 Features
