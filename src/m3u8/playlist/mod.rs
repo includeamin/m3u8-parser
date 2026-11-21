@@ -251,6 +251,20 @@ impl Playlist {
     }
 
     fn validate_tag(&self, tag: &Tag, errors: &mut Vec<ValidationError>) {
+        if let Tag::ExtXMedia { pathway_id, .. }
+        | Tag::ExtXStreamInf { pathway_id, .. }
+        | Tag::ExtXIFrameStreamInf { pathway_id, .. } = tag
+        {
+            if pathway_id
+                .as_deref()
+                .is_some_and(|id| !is_valid_pathway_id(id))
+            {
+                errors.push(ValidationError::InvalidContentSteering(format!(
+                    "PATHWAY-ID on {} must be non-empty and use only A-Z, a-z, 0-9, '.', '-' and '_'",
+                    tag_name(tag)
+                )));
+            }
+        }
         match tag {
             Tag::ExtXVersion(version) => {
                 if *version < 1 || *version > MAX_VERSION {
@@ -271,6 +285,23 @@ impl Playlist {
                     ));
                 } else {
                     validate_key(key, "EXT-X-SESSION-KEY", errors);
+                }
+            }
+            Tag::ExtXContentSteering {
+                server_uri,
+                pathway_id,
+            } => {
+                if server_uri.is_empty() {
+                    errors.push(ValidationError::InvalidContentSteering(
+                        "SERVER-URI must not be empty".to_string(),
+                    ));
+                }
+                if let Some(id) = pathway_id {
+                    if !is_valid_pathway_id(id) {
+                        errors.push(ValidationError::InvalidContentSteering(format!(
+                            "PATHWAY-ID {id:?} must be non-empty and use only A-Z, a-z, 0-9, '.', '-' and '_'"
+                        )));
+                    }
                 }
             }
             Tag::ExtXMap(Map { uri, .. }) if uri.is_empty() => {
@@ -502,7 +533,7 @@ impl Playlist {
             errors.push(ValidationError::ExtM3UNotFirst);
         }
 
-        let singleton_tags: [(&str, TagPredicate); 9] = [
+        let singleton_tags: [(&str, TagPredicate); 10] = [
             ("EXT-X-VERSION", is_version),
             ("EXT-X-TARGETDURATION", is_target_duration),
             ("EXT-X-MEDIA-SEQUENCE", is_media_sequence),
@@ -511,6 +542,7 @@ impl Playlist {
             ("EXT-X-I-FRAMES-ONLY", is_i_frames_only),
             ("EXT-X-INDEPENDENT-SEGMENTS", is_independent_segments),
             ("EXT-X-START", is_start),
+            ("EXT-X-CONTENT-STEERING", is_content_steering),
             ("EXT-X-ENDLIST", is_end_list),
         ];
         for (name, predicate) in singleton_tags {
@@ -658,7 +690,7 @@ fn parse_extinf(value: &str) -> Result<(f64, Option<String>), SyntaxError> {
 }
 
 /// Tags that are meaningless without a value; a bare occurrence is a syntax error.
-const VALUE_TAGS: [&str; 24] = [
+const VALUE_TAGS: [&str; 25] = [
     "EXT-X-VERSION",
     "EXT-X-TARGETDURATION",
     "EXT-X-MEDIA-SEQUENCE",
@@ -678,6 +710,7 @@ const VALUE_TAGS: [&str; 24] = [
     "EXT-X-I-FRAME-STREAM-INF",
     "EXT-X-MEDIA",
     "EXT-X-SESSION-DATA",
+    "EXT-X-CONTENT-STEERING",
     "EXT-X-SERVER-CONTROL",
     "EXT-X-PART-INF",
     "EXT-X-PART",
@@ -743,6 +776,7 @@ fn parse_tag(line: &str) -> Result<Option<Tag>, SyntaxError> {
         ("EXT-X-I-FRAME-STREAM-INF", Some(_)) => parse_i_frame_stream_inf(&attributes()?)?,
         ("EXT-X-MEDIA", Some(_)) => parse_media(&attributes()?)?,
         ("EXT-X-SESSION-DATA", Some(_)) => parse_session_data(&attributes()?)?,
+        ("EXT-X-CONTENT-STEERING", Some(_)) => parse_content_steering(&attributes()?)?,
         ("EXT-X-SERVER-CONTROL", Some(_)) => parse_server_control(&attributes()?)?,
         ("EXT-X-PART-INF", Some(_)) => Tag::ExtXPartInf {
             part_target_duration: required_parsed(&attributes()?, "PART-TARGET", "EXT-X-PART-INF")?,
@@ -904,6 +938,7 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         video: optional_string(attributes, "VIDEO"),
         subtitle: optional_string(attributes, "SUBTITLES"),
         closed_captions: optional_string(attributes, "CLOSED-CAPTIONS"),
+        pathway_id: optional_string(attributes, "PATHWAY-ID"),
         extra_attributes: extra_attributes(
             attributes,
             &[
@@ -916,6 +951,7 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
                 "VIDEO",
                 "SUBTITLES",
                 "CLOSED-CAPTIONS",
+                "PATHWAY-ID",
             ],
         ),
     })
@@ -930,6 +966,7 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
         resolution: optional_string(attributes, "RESOLUTION"),
         frame_rate: optional_parsed(attributes, "FRAME-RATE", TAG)?,
         uri: required_string(attributes, "URI", TAG)?,
+        pathway_id: optional_string(attributes, "PATHWAY-ID"),
         extra_attributes: extra_attributes(
             attributes,
             &[
@@ -939,6 +976,7 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
                 "RESOLUTION",
                 "FRAME-RATE",
                 "URI",
+                "PATHWAY-ID",
             ],
         ),
     })
@@ -959,6 +997,7 @@ fn parse_media(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         language_codec: optional_string(attributes, "LANGUAGE-CODEC"),
         forced: optional_boolean(attributes, "FORCED", TAG)?,
         channels: optional_string(attributes, "CHANNELS"),
+        pathway_id: optional_string(attributes, "PATHWAY-ID"),
         extra_attributes: extra_attributes(
             attributes,
             &[
@@ -974,6 +1013,7 @@ fn parse_media(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
                 "LANGUAGE-CODEC",
                 "FORCED",
                 "CHANNELS",
+                "PATHWAY-ID",
             ],
         ),
     })
@@ -995,6 +1035,14 @@ fn parse_session_data(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         value,
         uri,
         language: optional_string(attributes, "LANGUAGE"),
+    })
+}
+
+fn parse_content_steering(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-CONTENT-STEERING";
+    Ok(Tag::ExtXContentSteering {
+        server_uri: required_string(attributes, "SERVER-URI", TAG)?,
+        pathway_id: optional_string(attributes, "PATHWAY-ID"),
     })
 }
 
@@ -1155,6 +1203,13 @@ fn validate_key(key: &Key, tag: &str, errors: &mut Vec<ValidationError>) {
     }
 }
 
+fn is_valid_pathway_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+}
+
 fn is_version(tag: &Tag) -> bool {
     matches!(tag, Tag::ExtXVersion(_))
 }
@@ -1179,6 +1234,9 @@ fn is_independent_segments(tag: &Tag) -> bool {
 fn is_start(tag: &Tag) -> bool {
     matches!(tag, Tag::ExtXStart { .. })
 }
+fn is_content_steering(tag: &Tag) -> bool {
+    matches!(tag, Tag::ExtXContentSteering { .. })
+}
 fn is_end_list(tag: &Tag) -> bool {
     matches!(tag, Tag::ExtXEndList)
 }
@@ -1191,6 +1249,7 @@ fn is_master_tag(tag: &Tag) -> bool {
             | Tag::ExtXIFrameStreamInf { .. }
             | Tag::ExtXSessionData { .. }
             | Tag::ExtXSessionKey(_)
+            | Tag::ExtXContentSteering { .. }
     )
 }
 
@@ -1266,6 +1325,7 @@ fn tag_name(tag: &Tag) -> &'static str {
         Tag::ExtXMap(_) => "EXT-X-MAP",
         Tag::ExtXKey(_) => "EXT-X-KEY",
         Tag::ExtXSessionKey(_) => "EXT-X-SESSION-KEY",
+        Tag::ExtXContentSteering { .. } => "EXT-X-CONTENT-STEERING",
         Tag::ExtXDateRange { .. } => "EXT-X-DATERANGE",
         Tag::ExtXStart { .. } => "EXT-X-START",
         Tag::ExtXIndependentSegments => "EXT-X-INDEPENDENT-SEGMENTS",

@@ -236,6 +236,7 @@ impl PlaylistBuilder {
             language_codec: language_codec.map(|s| s.to_string()),
             forced,
             channels: None,
+            pathway_id: None,
             extra_attributes: Vec::new(),
         })
     }
@@ -264,6 +265,7 @@ impl PlaylistBuilder {
             video: video.map(|s| s.to_string()),
             subtitle: subtitle.map(|s| s.to_string()),
             closed_captions: closed_captions.map(|s| s.to_string()),
+            pathway_id: None,
             extra_attributes: Vec::new(),
         })
     }
@@ -286,6 +288,7 @@ impl PlaylistBuilder {
             resolution: resolution.map(|s| s.to_string()),
             frame_rate,
             uri: uri.to_string(),
+            pathway_id: None,
             extra_attributes: Vec::new(),
         })
     }
@@ -315,6 +318,14 @@ impl PlaylistBuilder {
             value: Some(value.to_string()),
             uri: None,
             language: language.map(|s| s.to_string()),
+        })
+    }
+
+    /// Adds an `ExtXContentSteering` tag.
+    pub fn content_steering(self, server_uri: &str, pathway_id: Option<&str>) -> Self {
+        self.tag(Tag::ExtXContentSteering {
+            server_uri: server_uri.to_string(),
+            pathway_id: pathway_id.map(|s| s.to_string()),
         })
     }
 
