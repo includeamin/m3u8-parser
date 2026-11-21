@@ -3,7 +3,7 @@ mod tests {
     use crate::m3u8::error::{ParseError, SubstitutionError, SyntaxError};
     use crate::m3u8::playlist::builder::PlaylistBuilder;
     use crate::m3u8::playlist::Playlist;
-    use crate::m3u8::tags::{AttributeValue, ByteRange, Key, Map, Tag};
+    use crate::m3u8::tags::{AttributeValue, ByteRange, Key, KeyMethod, Map, PlaylistType, Tag};
     use crate::m3u8::validation::ValidationError;
     use std::collections::HashMap;
     use std::io::Write;
@@ -105,7 +105,7 @@ variant.m3u8
             vec![
                 Tag::ExtM3U,
                 Tag::ExtXKey(Key {
-                    method: "AES-128".to_string(),
+                    method: KeyMethod::Aes128,
                     uri: Some("key.bin".to_string()),
                     iv: Some("0x1234".to_string()),
                     keyformat: Some("identity".to_string()),
@@ -552,7 +552,7 @@ https://media.example.com/third.ts
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXKey(Key {
-                    method: "AES-128".to_string(),
+                    method: KeyMethod::Aes128,
                     uri: Some("https://priv.example.com/key.php?r=52".to_string()),
                     iv: None,
                     keyformat: None,
@@ -586,7 +586,7 @@ https://media.example.com/third.ts
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXKey(Key {
-                    method: "AES-128".to_string(),
+                    method: KeyMethod::Aes128,
                     uri: Some("https://priv.example.com/key.php?r=52".to_string()),
                     iv: None,
                     keyformat: None,
@@ -1031,7 +1031,7 @@ https://media.example.com/third.ts
             .version(3)
             .target_duration(10)
             .key(
-                "INVALID-METHOD", // Invalid key method
+                KeyMethod::from("INVALID-METHOD"), // Invalid key method
                 Some("https://priv.example.com/key.php?r=52"),
                 None,
                 None,
@@ -1263,7 +1263,7 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXTargetDuration(6),
                 Tag::ExtXKey(Key {
-                    method: "NONE".to_string(),
+                    method: KeyMethod::None,
                     uri: Some("key.bin".to_string()),
                     iv: None,
                     keyformat: None,
@@ -1468,7 +1468,7 @@ third.ts
         assert_eq!(
             segments[0].key,
             Some(Key {
-                method: "AES-128".to_string(),
+                method: KeyMethod::Aes128,
                 uri: Some("key.bin".to_string()),
                 iv: None,
                 keyformat: None,
@@ -1510,14 +1510,14 @@ third.ts
                 Tag::ExtM3U,
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXKey(Key {
-                    method: "AES-128".to_string(),
+                    method: KeyMethod::Aes128,
                     uri: Some("key.bin".to_string()),
                     iv: Some("0x01".to_string()),
                     keyformat: None,
                     keyformatversions: None,
                 }),
                 Tag::ExtXKey(Key {
-                    method: "AES-128".to_string(),
+                    method: KeyMethod::Aes128,
                     uri: Some("key.bin".to_string()),
                     iv: None,
                     keyformat: None,
@@ -1575,7 +1575,7 @@ third.ts
     fn test_validate_session_key_rules() {
         let session_key = |method: &str, uri: Option<&str>| {
             Tag::ExtXSessionKey(Key {
-                method: method.to_string(),
+                method: method.into(),
                 uri: uri.map(str::to_string),
                 iv: None,
                 keyformat: None,
@@ -1858,7 +1858,7 @@ third.ts
                 Tag::ExtXVersion(4),
                 Tag::ExtXTargetDuration(6),
                 Tag::ExtXKey(Key {
-                    method: "SAMPLE-AES".to_string(),
+                    method: KeyMethod::SampleAes,
                     uri: Some("key.bin".to_string()),
                     iv: None,
                     keyformat: None,
@@ -2648,6 +2648,53 @@ https://cdn.example.com/v/v.m3u8\n"
             media.resolve_uris("live/x.m3u8"),
             Err(UriError::InvalidBase("live/x.m3u8".to_string()))
         );
+    }
+
+    #[test]
+    fn test_playlist_type_and_key_method_are_typed() {
+        let data = "#EXTM3U\n#EXT-X-VERSION:5\n#EXT-X-TARGETDURATION:6\n#EXT-X-PLAYLIST-TYPE:EVENT\n\
+#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"k.key\"\n#EXTINF:6,\na.ts\n#EXT-X-KEY:METHOD=NONE\n#EXTINF:6,\nb.ts\n";
+        let playlist: Playlist = data.parse().unwrap();
+        assert!(playlist
+            .tags
+            .contains(&Tag::ExtXPlaylistType(PlaylistType::Event)));
+        let methods: Vec<_> = playlist
+            .tags
+            .iter()
+            .filter_map(|tag| match tag {
+                Tag::ExtXKey(key) => Some(key.method.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(methods, [KeyMethod::SampleAes, KeyMethod::None]);
+        assert_eq!(playlist.to_string(), data);
+        assert_eq!(playlist.validate(), Ok(()));
+
+        assert_eq!("VOD".parse(), Ok(PlaylistType::Vod));
+        assert_eq!(PlaylistType::Event.to_string(), "EVENT");
+        assert!("vod".parse::<PlaylistType>().is_err());
+        assert!(matches!(
+            syntax_error("#EXTM3U\n#EXT-X-PLAYLIST-TYPE:LIVE\n").1,
+            SyntaxError::InvalidTagValue { .. }
+        ));
+
+        let unknown: Playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXT-X-KEY:METHOD=AES-256,URI=\"k\"\n#EXTINF:6,\na.ts\n"
+            .parse()
+            .unwrap();
+        assert_eq!(KeyMethod::from("AES-256").as_str(), "AES-256");
+        assert!(unknown
+            .validate()
+            .unwrap_err()
+            .contains(&ValidationError::InvalidKeyMethod("AES-256".to_string())));
+        assert_eq!(unknown.to_string().matches("METHOD=AES-256").count(), 1);
+
+        let built = PlaylistBuilder::new()
+            .extm3u()
+            .target_duration(6)
+            .playlist_type(PlaylistType::Vod)
+            .build()
+            .unwrap();
+        assert!(built.to_string().contains("#EXT-X-PLAYLIST-TYPE:VOD"));
     }
 
     #[test]

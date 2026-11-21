@@ -1,5 +1,5 @@
 use crate::m3u8::playlist::Playlist;
-use crate::m3u8::tags::{ByteRange, Key, Map, Tag};
+use crate::m3u8::tags::{ByteRange, Key, KeyMethod, Map, PlaylistType, Tag};
 use crate::m3u8::validation::ValidationError;
 
 /// A builder for creating a `Playlist` with a chained interface.
@@ -164,14 +164,14 @@ impl PlaylistBuilder {
     /// Adds an `ExtXKey` tag.
     pub fn key(
         self,
-        method: &str,
+        method: KeyMethod,
         uri: Option<&str>,
         iv: Option<&str>,
         keyformat: Option<&str>,
         keyformatversions: Option<&str>,
     ) -> Self {
         self.tag(Tag::ExtXKey(Key {
-            method: method.to_string(),
+            method,
             uri: uri.map(|s| s.to_string()),
             iv: iv.map(|s| s.to_string()),
             keyformat: keyformat.map(|s| s.to_string()),
@@ -330,9 +330,9 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXSessionKey` tag.
-    pub fn session_key(self, method: &str, uri: Option<&str>, iv: Option<&str>) -> Self {
+    pub fn session_key(self, method: KeyMethod, uri: Option<&str>, iv: Option<&str>) -> Self {
         self.tag(Tag::ExtXSessionKey(Key {
-            method: method.to_string(),
+            method,
             uri: uri.map(|s| s.to_string()),
             iv: iv.map(|s| s.to_string()),
             keyformat: None,
@@ -348,7 +348,7 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXPlaylistType` tag.
-    pub fn playlist_type(self, playlist_type: &str) -> Self {
-        self.tag(Tag::ExtXPlaylistType(playlist_type.to_string()))
+    pub fn playlist_type(self, playlist_type: PlaylistType) -> Self {
+        self.tag(Tag::ExtXPlaylistType(playlist_type))
     }
 }
