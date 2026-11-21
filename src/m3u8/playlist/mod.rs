@@ -46,7 +46,7 @@ use crate::m3u8::parser::{
     attribute, extra_attributes, optional_boolean, optional_parsed, optional_string,
     parse_attribute_list, required_parsed, required_string, Attribute,
 };
-use crate::m3u8::tags::{ByteRange, Key, Map, Tag};
+use crate::m3u8::tags::{ByteRange, Key, KeyMethod, Map, Tag};
 use crate::m3u8::validation::ValidationError;
 use std::collections::HashSet;
 use std::fs::File;
@@ -192,7 +192,7 @@ impl Playlist {
                 Tag::ExtXMediaSequence(first) => sequence = *first,
                 Tag::ExtXDiscontinuity => discontinuity = true,
                 Tag::ExtXKey(value) => {
-                    key = (value.method != "NONE").then(|| value.clone());
+                    key = (value.method != KeyMethod::None).then(|| value.clone());
                 }
                 Tag::ExtXMap(value) => map = Some(value.clone()),
                 Tag::ExtXByteRange(value) => byterange = Some(*value),
@@ -280,7 +280,7 @@ impl Playlist {
             }
             Tag::ExtXKey(key) => validate_key(key, "EXT-X-KEY", errors),
             Tag::ExtXSessionKey(key) => {
-                if key.method == "NONE" {
+                if key.method == KeyMethod::None {
                     errors.push(ValidationError::InvalidKeyAttributes(
                         "EXT-X-SESSION-KEY METHOD must not be NONE".to_string(),
                     ));
@@ -745,11 +745,8 @@ fn parse_tag(line: &str) -> Result<Option<Tag>, SyntaxError> {
             Tag::ExtXDiscontinuitySequence(parse_value(value, "EXT-X-DISCONTINUITY-SEQUENCE")?)
         }
         ("EXT-X-BITRATE", Some(value)) => Tag::ExtXBitrate(parse_value(value, "EXT-X-BITRATE")?),
-        ("EXT-X-PLAYLIST-TYPE", Some(value @ ("EVENT" | "VOD"))) => {
-            Tag::ExtXPlaylistType(value.to_string())
-        }
         ("EXT-X-PLAYLIST-TYPE", Some(value)) => {
-            return Err(invalid_value("EXT-X-PLAYLIST-TYPE", value))
+            Tag::ExtXPlaylistType(parse_value(value, "EXT-X-PLAYLIST-TYPE")?)
         }
         ("EXT-X-ALLOW-CACHE", Some("YES")) => Tag::ExtXAllowCache(true),
         ("EXT-X-ALLOW-CACHE", Some("NO")) => Tag::ExtXAllowCache(false),
@@ -817,7 +814,7 @@ fn non_empty(value: &str, tag: &'static str) -> Result<String, SyntaxError> {
 
 fn parse_key(attributes: &[Attribute], tag: &'static str) -> Result<Key, SyntaxError> {
     Ok(Key {
-        method: required_string(attributes, "METHOD", tag)?,
+        method: KeyMethod::from(required_string(attributes, "METHOD", tag)?.as_str()),
         uri: optional_string(attributes, "URI"),
         iv: optional_string(attributes, "IV"),
         keyformat: optional_string(attributes, "KEYFORMAT"),
@@ -1181,8 +1178,8 @@ fn validate_serialization(tag: &Tag, errors: &mut Vec<ValidationError>) {
 }
 
 fn validate_key(key: &Key, tag: &str, errors: &mut Vec<ValidationError>) {
-    match key.method.as_str() {
-        "NONE" => {
+    match &key.method {
+        KeyMethod::None => {
             if key.uri.is_some()
                 || key.iv.is_some()
                 || key.keyformat.is_some()
@@ -1193,14 +1190,14 @@ fn validate_key(key: &Key, tag: &str, errors: &mut Vec<ValidationError>) {
                 )));
             }
         }
-        "AES-128" | "SAMPLE-AES" => {
+        KeyMethod::Aes128 | KeyMethod::SampleAes => {
             if key.uri.as_deref().is_none_or(str::is_empty) {
                 errors.push(ValidationError::InvalidKeyAttributes(format!(
                     "{tag} encryption methods require URI"
                 )));
             }
         }
-        _ => errors.push(ValidationError::InvalidKeyMethod(key.method.clone())),
+        KeyMethod::Other(method) => errors.push(ValidationError::InvalidKeyMethod(method.clone())),
     }
 }
 
@@ -1277,7 +1274,7 @@ fn is_media_segment_tag(tag: &Tag) -> bool {
 fn minimum_version(tag: &Tag, has_i_frames_only: bool) -> Option<u8> {
     match tag {
         Tag::ExtXKey(key) | Tag::ExtXSessionKey(key) => {
-            if key.method == "SAMPLE-AES"
+            if key.method == KeyMethod::SampleAes
                 || key.keyformat.is_some()
                 || key.keyformatversions.is_some()
             {

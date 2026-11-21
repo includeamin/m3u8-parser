@@ -12,7 +12,7 @@ pub enum Tag {
     /// The EXT-X-PLAYLIST-TYPE tag provides mutability information about the
     //    Media Playlist file.  It applies to the entire Media Playlist file.
     //    It is OPTIONAL.  Its format is:
-    ExtXPlaylistType(String),
+    ExtXPlaylistType(PlaylistType),
     /// A media segment: its EXTINF duration and optional title, and the URI line that follows.
     ExtInf {
         uri: String,
@@ -180,11 +180,82 @@ pub enum Tag {
     Unknown(String),
 }
 
+/// The mutability of a Media Playlist, from EXT-X-PLAYLIST-TYPE.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum PlaylistType {
+    /// New segments may only be appended.
+    Event,
+    /// The playlist never changes.
+    Vod,
+}
+
+impl std::fmt::Display for PlaylistType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            PlaylistType::Event => "EVENT",
+            PlaylistType::Vod => "VOD",
+        })
+    }
+}
+
+impl std::str::FromStr for PlaylistType {
+    type Err = ();
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "EVENT" => Ok(PlaylistType::Event),
+            "VOD" => Ok(PlaylistType::Vod),
+            _ => Err(()),
+        }
+    }
+}
+
+/// The encryption method of an EXT-X-KEY or EXT-X-SESSION-KEY tag.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub enum KeyMethod {
+    /// `NONE`: the segments are not encrypted.
+    None,
+    /// `AES-128`: whole-segment encryption.
+    Aes128,
+    /// `SAMPLE-AES`: sample encryption.
+    SampleAes,
+    /// A method this crate does not know; validation rejects it.
+    Other(String),
+}
+
+impl KeyMethod {
+    /// The method as written in a playlist.
+    pub fn as_str(&self) -> &str {
+        match self {
+            KeyMethod::None => "NONE",
+            KeyMethod::Aes128 => "AES-128",
+            KeyMethod::SampleAes => "SAMPLE-AES",
+            KeyMethod::Other(method) => method,
+        }
+    }
+}
+
+impl From<&str> for KeyMethod {
+    fn from(value: &str) -> Self {
+        match value {
+            "NONE" => KeyMethod::None,
+            "AES-128" => KeyMethod::Aes128,
+            "SAMPLE-AES" => KeyMethod::SampleAes,
+            other => KeyMethod::Other(other.to_string()),
+        }
+    }
+}
+
+impl std::fmt::Display for KeyMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Encryption key attributes shared by EXT-X-KEY and EXT-X-SESSION-KEY.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Key {
-    /// `NONE`, `AES-128`, or `SAMPLE-AES`.
-    pub method: String,
+    pub method: KeyMethod,
     pub uri: Option<String>,
     pub iv: Option<String>,
     pub keyformat: Option<String>,
