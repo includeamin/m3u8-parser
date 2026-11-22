@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0] - 2026-11-22
+
+### 🚀 Features
+
+- Merge Playlist Delta Updates with `Playlist::apply_delta_update`, replacing `EXT-X-SKIP` with the skipped segments and their tags from the previous playlist
+- Add `DeltaUpdateError` for deltas that cannot be applied
+
+### 📚 Documentation
+
+- Add runnable examples for media playlists, master playlists, building and URI resolution
+
 ## [0.12.0] - 2026-11-22
 
 ### 🚀 Features
