@@ -68,12 +68,6 @@ pub enum ValidationError {
     /// Error indicating that the ID specified in a date range is invalid.
     InvalidDateRangeId,
 
-    /// Error indicating that the start date specified in a date range is invalid.
-    InvalidDateRangeStartDate,
-
-    /// Error indicating that the end date specified in a date range is invalid.
-    InvalidDateRangeEndDate,
-
     /// Error indicating that the planned duration specified in a date range is invalid.
     ///
     /// # Arguments
@@ -120,6 +114,10 @@ pub enum ValidationError {
 
     /// Error indicating that a CODECS attribute is invalid.
     InvalidCodecs(String),
+
+    /// Error indicating that a `LANGUAGE` attribute is not a well-formed RFC 5646
+    /// language tag. Holds the tag.
+    InvalidLanguage(String),
 
     /// Error indicating that EXT-X-SERVER-CONTROL hold-back values are too short
     /// for the playlist's target durations.

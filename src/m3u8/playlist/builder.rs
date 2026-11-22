@@ -1,6 +1,9 @@
 use crate::m3u8::datetime::DateTime;
 use crate::m3u8::playlist::Playlist;
-use crate::m3u8::tags::{ByteRange, Codecs, Key, KeyMethod, Map, PlaylistType, Resolution, Tag};
+use crate::m3u8::tags::{
+    ByteRange, Characteristics, ClosedCaptions, Codecs, Define, InstreamId, Key, KeyMethod,
+    LanguageTag, Map, MediaType, PlaylistType, PreloadHintType, Resolution, Tag,
+};
 use crate::m3u8::validation::ValidationError;
 
 /// A builder for creating a `Playlist` with a chained interface.
@@ -40,11 +43,11 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXDateRange` tag with only its required attributes.
-    pub fn date_range(self, id: &str, start_date: &str) -> Self {
+    pub fn date_range(self, id: &str, start_date: DateTime) -> Self {
         self.tag(Tag::ExtXDateRange {
             id: id.to_string(),
             class: None,
-            start_date: start_date.to_string(),
+            start_date,
             cue: None,
             end_date: None,
             duration: None,
@@ -92,9 +95,9 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXPreloadHint` tag; `type_` is `PART` or `MAP`.
-    pub fn preload_hint(self, type_: &str, uri: &str) -> Self {
+    pub fn preload_hint(self, type_: impl Into<PreloadHintType>, uri: &str) -> Self {
         self.tag(Tag::ExtXPreloadHint {
-            type_: type_.to_string(),
+            type_: type_.into(),
             uri: uri.to_string(),
             byterange_start: None,
             byterange_length: None,
@@ -204,36 +207,36 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXDefine` tag.
-    pub fn define(self, value: &str) -> Self {
-        self.tag(Tag::ExtXDefine(value.to_string()))
+    pub fn define(self, define: Define) -> Self {
+        self.tag(Tag::ExtXDefine(define))
     }
 
     /// Adds an `ExtXMedia` tag.
     #[allow(clippy::too_many_arguments)]
     pub fn media(
         self,
-        type_: &str,
+        type_: impl Into<MediaType>,
         group_id: &str,
         name: Option<&str>,
         uri: Option<&str>,
         default: Option<bool>,
         autoselect: Option<bool>,
-        characteristics: Option<&str>,
-        language: Option<&str>,
+        characteristics: Option<Characteristics>,
+        language: Option<LanguageTag>,
         forced: Option<bool>,
         language_codec: Option<&str>,
-        instream_id: Option<&str>,
+        instream_id: Option<InstreamId>,
     ) -> Self {
         self.tag(Tag::ExtXMedia {
-            type_: type_.to_string(),
+            type_: type_.into(),
             group_id: group_id.to_string(),
             name: name.map(|s| s.to_string()),
             uri: uri.map(|s| s.to_string()),
             default,
             autoselect,
-            characteristics: characteristics.map(|s| s.to_string()),
-            language: language.map(|s| s.to_string()),
-            instream_id: instream_id.map(|s| s.to_string()),
+            characteristics,
+            language,
+            instream_id,
             language_codec: language_codec.map(|s| s.to_string()),
             forced,
             channels: None,
@@ -254,7 +257,7 @@ impl PlaylistBuilder {
         audio: Option<&str>,
         video: Option<&str>,
         subtitle: Option<&str>,
-        closed_captions: Option<&str>,
+        closed_captions: Option<ClosedCaptions>,
     ) -> Self {
         self.tag(Tag::ExtXStreamInf {
             bandwidth,
@@ -265,7 +268,9 @@ impl PlaylistBuilder {
             audio: audio.map(|s| s.to_string()),
             video: video.map(|s| s.to_string()),
             subtitle: subtitle.map(|s| s.to_string()),
-            closed_captions: closed_captions.map(|s| s.to_string()),
+            closed_captions,
+            video_range: None,
+            hdcp_level: None,
             pathway_id: None,
             extra_attributes: Vec::new(),
         })
@@ -288,6 +293,8 @@ impl PlaylistBuilder {
             codecs,
             resolution,
             frame_rate,
+            video_range: None,
+            hdcp_level: None,
             uri: uri.to_string(),
             pathway_id: None,
             extra_attributes: Vec::new(),
@@ -313,12 +320,12 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXSessionData` tag.
-    pub fn session_data(self, id: &str, value: &str, language: Option<&str>) -> Self {
+    pub fn session_data(self, id: &str, value: &str, language: Option<LanguageTag>) -> Self {
         self.tag(Tag::ExtXSessionData {
             id: id.to_string(),
             value: Some(value.to_string()),
             uri: None,
-            language: language.map(|s| s.to_string()),
+            language,
         })
     }
 

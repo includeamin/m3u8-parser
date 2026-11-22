@@ -5,7 +5,9 @@ mod tests {
     use crate::m3u8::playlist::builder::PlaylistBuilder;
     use crate::m3u8::playlist::Playlist;
     use crate::m3u8::tags::{
-        AttributeValue, ByteRange, Codecs, Key, KeyMethod, Map, PlaylistType, Resolution, Tag,
+        AttributeValue, ByteRange, ClosedCaptions, Codecs, Define, HdcpLevel, HexSequence,
+        InstreamId, Key, KeyMethod, LanguageTag, Map, MediaType, PlaylistType, PreloadHintType,
+        Resolution, Tag, VideoRange,
     };
     use crate::m3u8::validation::ValidationError;
     use std::collections::HashMap;
@@ -153,7 +155,7 @@ main.m3u8
                 value: Some(value),
                 uri: None,
                 language: Some(language),
-            } if id == "com.example.title" && value == "Example" && language == "en"
+            } if id == "com.example.title" && value == "Example" && language.as_str() == "en"
         ));
         assert_eq!(
             playlist.tags[5].to_string(),
@@ -185,7 +187,7 @@ main.m3u8
                 Tag::ExtXVersion(6),
                 Tag::ExtXMedia {
                     pathway_id: None,
-                    type_: "AUDIO".to_string(),
+                    type_: MediaType::Audio,
                     group_id: "audio".to_string(),
                     name: None,
                     uri: None,
@@ -286,7 +288,7 @@ segment.ts
                     gap: Some(true),
                 },
                 Tag::ExtXPreloadHint {
-                    type_: "PART".to_string(),
+                    type_: PreloadHintType::Part,
                     uri: "next.ts".to_string(),
                     byterange_start: Some(0),
                     byterange_length: Some(100),
@@ -395,14 +397,14 @@ seg2.ts
             Tag::ExtXDateRange {
                 id: "splice-6FFFFFF0".to_string(),
                 class: None,
-                start_date: "2014-03-05T11:15:00Z".to_string(),
+                start_date: "2014-03-05T11:15:00Z".parse().unwrap(),
                 cue: Some("PRE,ONCE".to_string()),
                 end_date: None,
                 duration: None,
                 planned_duration: None,
                 end_on_next: None,
                 scte35_cmd: None,
-                scte35_out: Some("0xFC002F0000".to_string()),
+                scte35_out: Some("0xFC002F0000".parse().unwrap()),
                 scte35_in: None,
                 extra_attributes: vec![
                     (
@@ -848,14 +850,14 @@ https://media.example.com/third.ts
                 Tag::ExtXDateRange {
                     id: "ad-1".to_string(),
                     class: Some("com.example.ad".to_string()),
-                    start_date: "2020-01-01T00:00:00Z".to_string(),
+                    start_date: "2020-01-01T00:00:00Z".parse().unwrap(),
                     cue: None,
                     end_date: None,
                     duration: None,
                     planned_duration: Some(30.5),
                     end_on_next: Some(false),
                     scte35_cmd: None,
-                    scte35_out: Some("0xFC".to_string()),
+                    scte35_out: Some("0xFC".parse().unwrap()),
                     scte35_in: None,
                     extra_attributes: vec![(
                         "X-CUSTOM".to_string(),
@@ -1113,6 +1115,8 @@ https://media.example.com/third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    video_range: None,
+                    hdcp_level: None,
                     extra_attributes: Vec::new(),
                 },
                 Tag::Uri("variant.m3u8".to_string()),
@@ -1147,6 +1151,8 @@ https://media.example.com/third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    video_range: None,
+                    hdcp_level: None,
                     extra_attributes: Vec::new(),
                 },
             ],
@@ -1278,7 +1284,7 @@ https://media.example.com/third.ts
                 Tag::ExtXDateRange {
                     id: "ad-1".to_string(),
                     class: None,
-                    start_date: "2024-01-01T00:00:00Z".to_string(),
+                    start_date: "2024-01-01T00:00:00Z".parse().unwrap(),
                     cue: None,
                     end_date: None,
                     duration: Some(30.0),
@@ -1317,6 +1323,8 @@ https://media.example.com/third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    video_range: None,
+                    hdcp_level: None,
                     extra_attributes: Vec::new(),
                 },
                 Tag::Uri("variant.m3u8".to_string()),
@@ -1340,14 +1348,14 @@ https://media.example.com/third.ts
                 Tag::ExtXVersion(6),
                 Tag::ExtXMedia {
                     pathway_id: None,
-                    type_: "AUDIO".to_string(),
+                    type_: MediaType::Audio,
                     group_id: "audio-main".to_string(),
                     name: Some("English".to_string()),
                     uri: Some("audio.m3u8".to_string()),
                     default: Some(true),
                     autoselect: Some(true),
                     characteristics: None,
-                    language: Some("en".to_string()),
+                    language: Some("en".into()),
                     instream_id: None,
                     language_codec: None,
                     forced: None,
@@ -1365,6 +1373,8 @@ https://media.example.com/third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    video_range: None,
+                    hdcp_level: None,
                     extra_attributes: Vec::new(),
                 },
                 Tag::Uri("variant.m3u8".to_string()),
@@ -1540,7 +1550,10 @@ third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(9),
                 Tag::ExtXTargetDuration(4),
-                Tag::ExtXDefine("NAME=\"base\",VALUE=\"https://example.com\"".to_string()),
+                Tag::ExtXDefine(Define::Value {
+                    name: "base".to_string(),
+                    value: "https://example.com".to_string(),
+                }),
                 Tag::ExtXSkip {
                     skipped_segments: 3,
                     recently_removed_dateranges: Some("ad-1".to_string()),
@@ -1597,7 +1610,7 @@ third.ts
         let media = |type_: &str, name: &str, uri: Option<&str>, instream_id: Option<&str>| {
             Tag::ExtXMedia {
                 pathway_id: None,
-                type_: type_.to_string(),
+                type_: type_.into(),
                 group_id: "group".to_string(),
                 name: Some(name.to_string()),
                 uri: uri.map(str::to_string),
@@ -1605,7 +1618,7 @@ third.ts
                 autoselect: None,
                 characteristics: None,
                 language: None,
-                instream_id: instream_id.map(str::to_string),
+                instream_id: instream_id.map(InstreamId::from),
                 language_codec: None,
                 forced: None,
                 channels: None,
@@ -1711,7 +1724,7 @@ third.ts
     fn media_tag(type_: &str, instream_id: Option<&str>) -> Tag {
         Tag::ExtXMedia {
             pathway_id: None,
-            type_: type_.to_string(),
+            type_: type_.into(),
             group_id: "group".to_string(),
             name: Some("name".to_string()),
             uri: None,
@@ -1719,7 +1732,7 @@ third.ts
             autoselect: None,
             characteristics: None,
             language: None,
-            instream_id: instream_id.map(str::to_string),
+            instream_id: instream_id.map(InstreamId::from),
             language_codec: None,
             forced: None,
             channels: None,
@@ -1749,6 +1762,8 @@ third.ts
                     video: None,
                     subtitle: None,
                     closed_captions: None,
+                    video_range: None,
+                    hdcp_level: None,
                     extra_attributes: Vec::new(),
                 },
                 Tag::Uri("variant.m3u8".to_string()),
@@ -1761,7 +1776,7 @@ third.ts
                 Tag::ExtXDateRange {
                     id: "ad".to_string(),
                     class: None,
-                    start_date: "2024-01-01T00:00:00Z".to_string(),
+                    start_date: "2024-01-01T00:00:00Z".parse().unwrap(),
                     cue: None,
                     end_date: None,
                     duration: None,
@@ -1836,7 +1851,7 @@ third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(6),
                 media_tag("CLOSED-CAPTIONS", Some("SERVICE1")),
-                Tag::ExtXDefine("QUERYPARAM=\"token\"".to_string()),
+                Tag::ExtXDefine(Define::QueryParam("token".to_string())),
             ],
         };
         let media = Playlist {
@@ -1854,7 +1869,7 @@ third.ts
                 Tag::ExtXDateRange {
                     id: "ad".to_string(),
                     class: None,
-                    start_date: "2024-01-01T00:00:00Z".to_string(),
+                    start_date: "2024-01-01T00:00:00Z".parse().unwrap(),
                     cue: None,
                     end_date: None,
                     duration: None,
@@ -2036,46 +2051,83 @@ media.mp4
     }
 
     #[test]
-    fn test_validate_date_time_formats() {
-        let date_range = |start_date: &str, end_date: Option<&str>| Tag::ExtXDateRange {
-            id: "ad".to_string(),
-            class: None,
-            start_date: start_date.to_string(),
-            cue: None,
-            end_date: end_date.map(str::to_string),
-            duration: None,
-            planned_duration: None,
-            end_on_next: None,
-            scte35_cmd: None,
-            scte35_out: None,
-            scte35_in: None,
-            extra_attributes: Vec::new(),
-        };
+    fn test_validate_program_date_time_formats() {
         let valid = Playlist {
             tags: vec![
                 Tag::ExtM3U,
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2010-02-19T14:54:23.031+08:00".parse().unwrap()),
-                date_range("2024-01-01T00:00:00Z", Some("2024-01-01T00:00:30.5Z")),
                 Tag::ExtXProgramDateTime("2024-12-31T23:59:60-0500".parse().unwrap()),
             ],
         };
-        let invalid = Playlist {
-            tags: vec![
-                Tag::ExtM3U,
-                Tag::ExtXTargetDuration(10),
-                date_range("2024-13-01T00:00:00Z", Some("2024-01-01 00:00:00Z")),
-            ],
-        };
-
         assert_eq!(valid.validate(), Ok(()));
+    }
+
+    #[test]
+    fn test_daterange_dates_are_typed() {
+        let data = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n\
+#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T00:00:00.000Z\",END-DATE=\"2024-01-01T00:00:30.5+00:00\"\n";
+        let playlist: Playlist = data.parse().unwrap();
+        let Tag::ExtXDateRange {
+            start_date,
+            end_date: Some(end_date),
+            ..
+        } = &playlist.tags[2]
+        else {
+            panic!("expected a date range with an end date");
+        };
+        assert_eq!(start_date.unix_timestamp(), 1_704_067_200);
+        assert_eq!(end_date.unix_timestamp(), 1_704_067_230);
+        assert_eq!(end_date.nanosecond(), 500_000_000);
+        assert_eq!(playlist.validate(), Ok(()));
         assert_eq!(
-            invalid.validate(),
-            Err(vec![
-                ValidationError::InvalidDateRangeStartDate,
-                ValidationError::InvalidDateRangeEndDate,
-            ])
+            playlist.tags[2].to_string(),
+            "#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T00:00:00.000Z\",END-DATE=\"2024-01-01T00:00:30.5Z\""
         );
+    }
+
+    #[test]
+    fn test_parse_rejects_invalid_daterange_dates() {
+        for (attribute, value) in [
+            ("START-DATE", "2024-13-01T00:00:00Z"),
+            ("START-DATE", "yesterday"),
+            ("END-DATE", "2024-01-01 00:00:00Z"),
+        ] {
+            let other = if attribute == "START-DATE" {
+                String::new()
+            } else {
+                ",START-DATE=\"2024-01-01T00:00:00Z\"".to_string()
+            };
+            let data =
+                format!("#EXTM3U\n#EXT-X-DATERANGE:ID=\"ad\"{other},{attribute}=\"{value}\"\n");
+            let (line, error) = syntax_error(&data);
+            assert_eq!(line, 2);
+            assert!(
+                matches!(
+                    &error,
+                    SyntaxError::InvalidAttributeValue { attribute: found, .. } if *found == attribute
+                ),
+                "{attribute}={value}: {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_daterange_end_before_start() {
+        let playlist: Playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n\
+#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T00:00:10Z\",END-DATE=\"2024-01-01T00:00:09.999Z\"\n"
+            .parse()
+            .unwrap();
+        assert!(matches!(
+            playlist.validate().unwrap_err().as_slice(),
+            [ValidationError::InvalidDateRangeAttributes(_)]
+        ));
+
+        let equal: Playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n\
+#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T02:00:10+02:00\",END-DATE=\"2024-01-01T00:00:10Z\"\n"
+            .parse()
+            .unwrap();
+        assert_eq!(equal.validate(), Ok(()));
     }
 
     #[test]
@@ -2095,7 +2147,7 @@ media.mp4
                 None,
                 None,
                 None,
-                Some("NONE"),
+                Some(ClosedCaptions::None),
             )
             .uri("720p.m3u8")
             .iframe_stream_inf(
@@ -2129,7 +2181,7 @@ media.mp4
             .server_control(Some(24.0), Some(2.0), true)
             .part_inf(1.0)
             .skip(3)
-            .date_range("ad-1", "2024-01-01T00:00:00Z")
+            .date_range("ad-1", "2024-01-01T00:00:00Z".parse().unwrap())
             .part("seg1.0.mp4", 1.0)
             .extinf("seg1.mp4", 4.0, None)
             .discontinuity()
@@ -2263,7 +2315,11 @@ seg2.mp4
             SubstitutionError::DuplicateVariable(name) if name == "a"
         ));
         assert!(matches!(
-            substitute("#EXTM3U\n#EXT-X-DEFINE:NAME=\"a\"\n", &[], None),
+            substitute(
+                "#EXTM3U\n#EXT-X-DEFINE:NAME=\"a b\",VALUE=\"1\"\n",
+                &[],
+                None
+            ),
             SubstitutionError::InvalidDefine(_)
         ));
     }
@@ -2548,15 +2604,321 @@ v.m3u8\n\
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"x\",ASSOC-LANGUAGE=\"en\",SAMPLE-RATE=48000\n\
 #EXT-X-STREAM-INF:BANDWIDTH=1000,CODECS=\"hvc1\",VIDEO-RANGE=PQ,HDCP-LEVEL=TYPE-1,SCORE=1.5\n\
 v.m3u8\n\
-#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=100,URI=\"i.m3u8\",VIDEO-RANGE=PQ\n";
+#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=100,VIDEO-RANGE=PQ,URI=\"i.m3u8\",X-FUTURE=YES\n";
         let playlist: Playlist = data.parse().unwrap();
         assert!(playlist.tags.iter().any(|tag| matches!(
             tag,
-            Tag::ExtXStreamInf { extra_attributes, .. }
-                if extra_attributes[0] == ("VIDEO-RANGE".to_string(), AttributeValue::Unquoted("PQ".to_string()))
-                    && extra_attributes.len() == 3
+            Tag::ExtXStreamInf { extra_attributes, video_range: Some(VideoRange::Pq), hdcp_level: Some(HdcpLevel::Type1), .. }
+                if extra_attributes == &[("SCORE".to_string(), AttributeValue::Unquoted("1.5".to_string()))]
         )));
         assert_eq!(playlist.to_string(), data.replace("\\\n", ""));
+    }
+
+    #[test]
+    fn test_media_type_and_preload_hint_type_are_typed() {
+        let playlist: Playlist = "#EXTM3U\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"x\"\n\
+#EXT-X-MEDIA:TYPE=FUTURE,GROUP-ID=\"a\",NAME=\"y\"\n\
+#EXT-X-PRELOAD-HINT:TYPE=MAP,URI=\"init.mp4\"\n\
+#EXT-X-PRELOAD-HINT:TYPE=OTHER,URI=\"x\"\n"
+            .parse()
+            .unwrap();
+        let renditions = playlist.renditions();
+        assert_eq!(renditions[0].type_, MediaType::Audio);
+        assert_eq!(renditions[1].type_, MediaType::Other("FUTURE".to_string()));
+        assert_eq!(renditions[1].type_.as_str(), "FUTURE");
+        assert_eq!(playlist.renditions_in_group("AUDIO", "a").len(), 1);
+        assert_eq!(playlist.renditions_in_group(MediaType::Audio, "a").len(), 1);
+        assert!(matches!(
+            &playlist.tags[3],
+            Tag::ExtXPreloadHint {
+                type_: PreloadHintType::Map,
+                ..
+            }
+        ));
+        assert!(matches!(
+            &playlist.tags[4],
+            Tag::ExtXPreloadHint { type_: PreloadHintType::Other(other), .. } if other == "OTHER"
+        ));
+        assert_eq!(
+            playlist.tags[2].to_string(),
+            "#EXT-X-MEDIA:TYPE=FUTURE,GROUP-ID=\"a\",NAME=\"y\""
+        );
+        assert_eq!(MediaType::from("SUBTITLES"), MediaType::Subtitles);
+        assert_eq!(MediaType::ClosedCaptions.to_string(), "CLOSED-CAPTIONS");
+    }
+
+    #[test]
+    fn test_closed_captions_attribute_is_typed() {
+        let playlist: Playlist = "#EXTM3U\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1,CLOSED-CAPTIONS=NONE\n\
+a.m3u8\n\
+#EXT-X-STREAM-INF:BANDWIDTH=2,CLOSED-CAPTIONS=\"cc\"\n\
+b.m3u8\n"
+            .parse()
+            .unwrap();
+        let variants = playlist.variants();
+        assert_eq!(variants[0].closed_captions, Some(ClosedCaptions::None));
+        assert_eq!(
+            variants[1].closed_captions,
+            Some(ClosedCaptions::Group("cc".to_string()))
+        );
+        assert!(playlist.to_string().contains("CLOSED-CAPTIONS=NONE\n"));
+        assert!(playlist.to_string().contains("CLOSED-CAPTIONS=\"cc\"\n"));
+    }
+
+    #[test]
+    fn test_instream_id_is_typed_and_validated() {
+        for (text, parsed) in [
+            ("CC1", InstreamId::Cc(1)),
+            ("CC4", InstreamId::Cc(4)),
+            ("SERVICE1", InstreamId::Service(1)),
+            ("SERVICE63", InstreamId::Service(63)),
+            ("CC5", InstreamId::Other("CC5".to_string())),
+            ("CC0", InstreamId::Other("CC0".to_string())),
+            ("CC01", InstreamId::Other("CC01".to_string())),
+            ("SERVICE64", InstreamId::Other("SERVICE64".to_string())),
+            ("cc1", InstreamId::Other("cc1".to_string())),
+        ] {
+            let id = InstreamId::from(text);
+            assert_eq!(id, parsed, "{text}");
+            assert_eq!(id.to_string(), text);
+            assert_eq!(id.is_valid(), !matches!(parsed, InstreamId::Other(_)));
+        }
+
+        let media = |id: &str| -> Playlist {
+            format!("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS,GROUP-ID=\"cc\",NAME=\"x\",INSTREAM-ID=\"{id}\"\n")
+                .parse()
+                .unwrap()
+        };
+        assert_eq!(media("SERVICE12").validate(), Ok(()));
+        assert!(matches!(
+            media("CC9").validate().unwrap_err().as_slice(),
+            [ValidationError::InvalidMediaAttributes(_)]
+        ));
+        let old: Playlist = "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS,GROUP-ID=\"cc\",NAME=\"x\",INSTREAM-ID=\"SERVICE1\"\n"
+            .parse()
+            .unwrap();
+        assert!(old
+            .validate()
+            .unwrap_err()
+            .iter()
+            .any(|error| matches!(error, ValidationError::InsufficientVersion { .. })));
+    }
+
+    #[test]
+    fn test_channels_are_typed() {
+        let playlist: Playlist = "#EXTM3U\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"x\",CHANNELS=\"6/JOC/BINAURAL\"\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"y\",CHANNELS=\"2\"\n"
+            .parse()
+            .unwrap();
+        let renditions = playlist.renditions();
+        let channels = renditions[0].channels.as_ref().unwrap();
+        assert_eq!(channels.count, 6);
+        assert_eq!(channels.parameters, ["JOC", "BINAURAL"]);
+        assert_eq!(channels.to_string(), "6/JOC/BINAURAL");
+        assert_eq!(renditions[1].channels.as_ref().unwrap().count, 2);
+        assert!(playlist.to_string().contains("CHANNELS=\"6/JOC/BINAURAL\""));
+        for bad in ["", "stereo", "/JOC", "-2", "2.0"] {
+            let data = format!(
+                "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"x\",CHANNELS=\"{bad}\"\n"
+            );
+            assert!(data.parse::<Playlist>().is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn test_characteristics_are_typed() {
+        let playlist: Playlist = "#EXTM3U\n\
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"x\",CHARACTERISTICS=\"public.accessibility.describes-video, public.easy-to-read\"\n"
+            .parse()
+            .unwrap();
+        let rendition = &playlist.renditions()[0];
+        let characteristics = rendition.characteristics.as_ref().unwrap();
+        assert_eq!(characteristics.len(), 2);
+        assert!(!characteristics.is_empty());
+        assert!(characteristics.contains("public.easy-to-read"));
+        assert!(!characteristics.contains("public"));
+        assert_eq!(
+            characteristics.to_string(),
+            "public.accessibility.describes-video,public.easy-to-read"
+        );
+    }
+
+    #[test]
+    fn test_video_range_and_hdcp_level_are_typed() {
+        for (text, parsed) in [
+            ("SDR", VideoRange::Sdr),
+            ("HLG", VideoRange::Hlg),
+            ("PQ", VideoRange::Pq),
+            ("DV", VideoRange::Other("DV".to_string())),
+        ] {
+            assert_eq!(VideoRange::from(text), parsed);
+            assert_eq!(parsed.to_string(), text);
+        }
+        for (text, parsed) in [
+            ("NONE", HdcpLevel::None),
+            ("TYPE-0", HdcpLevel::Type0),
+            ("TYPE-1", HdcpLevel::Type1),
+            ("TYPE-2", HdcpLevel::Other("TYPE-2".to_string())),
+        ] {
+            assert_eq!(HdcpLevel::from(text), parsed);
+            assert_eq!(parsed.to_string(), text);
+        }
+        let playlist: Playlist = "#EXTM3U\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1,VIDEO-RANGE=HLG,HDCP-LEVEL=NONE\n\
+a.m3u8\n"
+            .parse()
+            .unwrap();
+        let variant = &playlist.variants()[0];
+        assert_eq!(variant.video_range, Some(VideoRange::Hlg));
+        assert_eq!(variant.hdcp_level, Some(HdcpLevel::None));
+    }
+
+    #[test]
+    fn test_scte35_attributes_are_typed() {
+        let playlist: Playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n\
+#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T00:00:00Z\",SCTE35-CMD=0xfc002F,SCTE35-IN=0X00\n"
+            .parse()
+            .unwrap();
+        let Tag::ExtXDateRange {
+            scte35_cmd: Some(cmd),
+            scte35_in: Some(scte35_in),
+            scte35_out: None,
+            ..
+        } = &playlist.tags[2]
+        else {
+            panic!("expected SCTE-35 attributes");
+        };
+        assert_eq!(cmd.as_bytes(), [0xFC, 0x00, 0x2F]);
+        assert_eq!(scte35_in.as_bytes(), [0x00]);
+        assert_eq!(
+            playlist.tags[2].to_string(),
+            "#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T00:00:00Z\",SCTE35-CMD=0xFC002F,SCTE35-IN=0x00"
+        );
+        for bad in ["FC", "0x", "0xF", "0xZZ", "0x-1", ""] {
+            assert!(bad.parse::<HexSequence>().is_err(), "{bad:?}");
+            let data = format!("#EXTM3U\n#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T00:00:00Z\",SCTE35-OUT={bad}\n");
+            assert!(data.parse::<Playlist>().is_err(), "{bad:?}");
+        }
+        assert_eq!(HexSequence::from(vec![0xAB, 0x01]).to_string(), "0xAB01");
+    }
+
+    #[test]
+    fn test_language_tag_is_typed_and_validated() {
+        let tag = LanguageTag::from("zh-Hant-TW");
+        assert_eq!(tag.primary(), "zh");
+        assert_eq!(tag.subtags().collect::<Vec<_>>(), ["zh", "Hant", "TW"]);
+        assert_eq!(tag.as_str(), "zh-Hant-TW");
+        assert!(tag.is_valid());
+        for valid in ["en", "eng", "en-US", "x-private", "de-CH-1996"] {
+            assert!(LanguageTag::from(valid).is_valid(), "{valid}");
+        }
+        for invalid in ["", "en_US", "en-", "-en", "e n", "123", "en-toolongsubtag"] {
+            assert!(!LanguageTag::from(invalid).is_valid(), "{invalid:?}");
+        }
+
+        let media =
+            "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"x\",LANGUAGE=\"en_US\"\n";
+        let playlist: Playlist = media.parse().unwrap();
+        assert_eq!(playlist.to_string(), media);
+        assert_eq!(
+            playlist.validate().unwrap_err(),
+            [ValidationError::InvalidLanguage("en_US".to_string())]
+        );
+        let session =
+            "#EXTM3U\n#EXT-X-SESSION-DATA:DATA-ID=\"d\",VALUE=\"v\",LANGUAGE=\"not a tag\"\n";
+        assert!(session
+            .parse::<Playlist>()
+            .unwrap()
+            .validate()
+            .unwrap_err()
+            .contains(&ValidationError::InvalidLanguage("not a tag".to_string())));
+    }
+
+    #[test]
+    fn test_define_is_typed() {
+        let playlist: Playlist = "#EXTM3U\n\
+#EXT-X-DEFINE:VALUE=\"1\",NAME=\"a\"\n\
+#EXT-X-DEFINE:IMPORT=\"b\"\n\
+#EXT-X-DEFINE:QUERYPARAM=\"c\"\n"
+            .parse()
+            .unwrap();
+        assert_eq!(
+            playlist.tags[1],
+            Tag::ExtXDefine(Define::Value {
+                name: "a".to_string(),
+                value: "1".to_string()
+            })
+        );
+        assert_eq!(
+            playlist.tags[2],
+            Tag::ExtXDefine(Define::Import("b".to_string()))
+        );
+        assert_eq!(
+            playlist.tags[3],
+            Tag::ExtXDefine(Define::QueryParam("c".to_string()))
+        );
+        assert_eq!(
+            [1, 2, 3].map(|index| match &playlist.tags[index] {
+                Tag::ExtXDefine(define) => define.name().to_string(),
+                _ => unreachable!(),
+            }),
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            playlist.tags[1].to_string(),
+            "#EXT-X-DEFINE:NAME=\"a\",VALUE=\"1\""
+        );
+
+        for bad in [
+            "NAME=\"a\"",
+            "VALUE=\"1\"",
+            "NAME=\"a\",VALUE=\"1\",IMPORT=\"a\"",
+            "IMPORT=\"a\",QUERYPARAM=\"a\"",
+            "X-OTHER=\"a\"",
+        ] {
+            let data = format!("#EXTM3U\n#EXT-X-DEFINE:{bad}\n");
+            let (line, error) = syntax_error(&data);
+            assert_eq!(line, 2);
+            assert!(
+                matches!(
+                    error,
+                    SyntaxError::ConflictingAttributes {
+                        tag: "EXT-X-DEFINE",
+                        ..
+                    }
+                ),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_builder_uses_typed_values() {
+        let playlist = PlaylistBuilder::new()
+            .extm3u()
+            .version(11)
+            .define(Define::QueryParam("t".to_string()))
+            .media(
+                MediaType::Audio,
+                "a",
+                Some("English"),
+                None,
+                Some(true),
+                Some(true),
+                Some(["public.easy-to-read"].into_iter().collect()),
+                Some("en".into()),
+                None,
+                None,
+                None,
+            )
+            .build()
+            .unwrap();
+        let text = playlist.to_string();
+        assert!(text.contains("#EXT-X-DEFINE:QUERYPARAM=\"t\"\n"));
+        assert!(text.contains("CHARACTERISTICS=\"public.easy-to-read\",LANGUAGE=\"en\""));
     }
 
     #[test]
@@ -2988,7 +3350,7 @@ lo2.m3u8\n"
         let audio = master.renditions_in_group("AUDIO", "aud");
         assert_eq!(audio.len(), 2);
         assert!(audio[0].default && audio[0].autoselect && !audio[1].default);
-        assert_eq!(audio[1].language.as_deref(), Some("fr"));
+        assert_eq!(audio[1].language.as_ref().map(|l| l.as_str()), Some("fr"));
         assert!(master.renditions_in_group("AUDIO", "other").is_empty());
 
         let dangling: Playlist = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n".parse().unwrap();

@@ -30,7 +30,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "  audio {:?} ({}){}",
                     rendition.name.unwrap_or_default(),
-                    rendition.language.unwrap_or_default(),
+                    rendition
+                        .language
+                        .map(|l| l.to_string())
+                        .unwrap_or_default(),
                     if rendition.default { " [default]" } else { "" }
                 );
             }
