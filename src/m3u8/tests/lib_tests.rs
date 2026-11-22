@@ -5,7 +5,7 @@ mod tests {
     use crate::m3u8::playlist::builder::PlaylistBuilder;
     use crate::m3u8::playlist::Playlist;
     use crate::m3u8::tags::{
-        AttributeValue, ByteRange, Key, KeyMethod, Map, PlaylistType, Resolution, Tag,
+        AttributeValue, ByteRange, Codecs, Key, KeyMethod, Map, PlaylistType, Resolution, Tag,
     };
     use crate::m3u8::validation::ValidationError;
     use std::collections::HashMap;
@@ -2086,7 +2086,7 @@ media.mp4
             .stream_inf(
                 2_000_000,
                 Some(1_800_000),
-                Some("avc1.640020,mp4a.40.2"),
+                Some("avc1.640020,mp4a.40.2".into()),
                 Some(Resolution {
                     width: 1280,
                     height: 720,
@@ -2290,6 +2290,83 @@ seg2.mp4
             .parse()
             .unwrap();
         assert_eq!(leap.tags.len(), 2);
+    }
+
+    #[test]
+    fn test_codecs_are_typed_on_stream_tags() {
+        let playlist: Playlist = "#EXTM3U\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1000,CODECS=\"avc1.640028, mp4a.40.2\"\n\
+v.m3u8\n\
+#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=100,CODECS=\"avc1.640028\",URI=\"i.m3u8\"\n"
+            .parse()
+            .unwrap();
+        let variants = playlist.variants();
+        let codecs = variants[0].codecs.as_ref().unwrap();
+        assert_eq!(
+            codecs.iter().collect::<Vec<_>>(),
+            ["avc1.640028", "mp4a.40.2"]
+        );
+        assert_eq!(codecs.len(), 2);
+        assert!(!codecs.is_empty());
+        assert!(codecs.contains_family("avc1"));
+        assert!(codecs.contains_family("MP4A"));
+        assert!(!codecs.contains_family("hvc1"));
+        assert!(!codecs.contains_family("avc"));
+        assert_eq!(codecs.to_string(), "avc1.640028,mp4a.40.2");
+        assert_eq!(
+            playlist.to_string(),
+            "#EXTM3U\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1000,CODECS=\"avc1.640028,mp4a.40.2\"\n\
+v.m3u8\n\
+#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=100,CODECS=\"avc1.640028\",URI=\"i.m3u8\"\n"
+        );
+        assert_eq!(
+            Codecs::from("hvc1.2.4.L93.B0"),
+            ["hvc1.2.4.L93.B0"].into_iter().collect::<Codecs>()
+        );
+    }
+
+    #[test]
+    fn test_validate_rejects_empty_codec_entries() {
+        for value in ["", "avc1,,mp4a", "avc1,"] {
+            let playlist: Playlist =
+                format!("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000,CODECS=\"{value}\"\nv.m3u8\n")
+                    .parse()
+                    .unwrap();
+            let errors = playlist.validate().unwrap_err();
+            assert!(
+                errors
+                    .iter()
+                    .any(|error| matches!(error, ValidationError::InvalidCodecs(_))),
+                "{value:?}: {errors:?}"
+            );
+            assert!(playlist
+                .to_string()
+                .contains(&format!("CODECS=\"{value}\"")));
+        }
+    }
+
+    #[test]
+    fn test_builder_codecs() {
+        let playlist = PlaylistBuilder::new()
+            .extm3u()
+            .stream_inf(
+                1000,
+                None,
+                Some(["avc1.4d401f", "mp4a.40.2"].into_iter().collect()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .uri("v.m3u8")
+            .build()
+            .unwrap();
+        assert!(playlist
+            .to_string()
+            .contains("CODECS=\"avc1.4d401f,mp4a.40.2\""));
     }
 
     #[test]

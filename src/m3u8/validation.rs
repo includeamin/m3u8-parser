@@ -118,6 +118,9 @@ pub enum ValidationError {
     /// Error indicating that an EXT-X-CONTENT-STEERING attribute is invalid.
     InvalidContentSteering(String),
 
+    /// Error indicating that a CODECS attribute is invalid.
+    InvalidCodecs(String),
+
     /// Error indicating that EXT-X-SERVER-CONTROL hold-back values are too short
     /// for the playlist's target durations.
     InvalidServerControl(String),
