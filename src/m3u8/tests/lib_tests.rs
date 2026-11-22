@@ -2827,6 +2827,88 @@ lo2.m3u8\n"
     }
 
     #[test]
+    fn test_apply_delta_update() {
+        use crate::m3u8::error::DeltaUpdateError;
+        let parse = |text: &str| text.parse::<Playlist>().unwrap();
+        let date = "START-DATE=\"2024-01-01T00:00:00Z\"";
+
+        let previous = parse(&format!(
+            "#EXTM3U\n#EXT-X-VERSION:10\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:10\n\
+#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n#EXTINF:4,\ns10.ts\n\
+#EXT-X-DATERANGE:ID=\"a\",{date}\n#EXT-X-DATERANGE:ID=\"gone\",{date}\n#EXTINF:4,\ns11.ts\n\
+#EXT-X-DISCONTINUITY\n#EXTINF:4,\ns12.ts\n#EXTINF:4,\ns13.ts\n"
+        ));
+        let delta = parse(
+            "#EXTM3U\n#EXT-X-VERSION:10\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:10\n\
+#EXT-X-SKIP:SKIPPED-SEGMENTS=3,RECENTLY-REMOVED-DATERANGES=\"gone\"\n\
+#EXTINF:4,\ns13.ts\n#EXTINF:4,\ns14.ts\n",
+        );
+        let expected = parse(&format!(
+            "#EXTM3U\n#EXT-X-VERSION:10\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:10\n\
+#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n#EXTINF:4,\ns10.ts\n\
+#EXT-X-DATERANGE:ID=\"a\",{date}\n#EXTINF:4,\ns11.ts\n\
+#EXT-X-DISCONTINUITY\n#EXTINF:4,\ns12.ts\n#EXTINF:4,\ns13.ts\n#EXTINF:4,\ns14.ts\n"
+        ));
+        let merged = previous.apply_delta_update(&delta).unwrap();
+        assert_eq!(merged, expected);
+        let sequences: Vec<_> = merged.media_segments().iter().map(|s| s.sequence).collect();
+        assert_eq!(sequences, [10, 11, 12, 13, 14]);
+
+        // The previous playlist reaches back further than the skipped range, so
+        // the key declared in the dropped part is restated.
+        let previous = parse(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:8\n\
+#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n#EXTINF:4,\ns8.ts\n#EXTINF:4,\ns9.ts\n\
+#EXTINF:4,\ns10.ts\n#EXTINF:4,\ns11.ts\n",
+        );
+        let delta = parse(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:10\n\
+#EXT-X-SKIP:SKIPPED-SEGMENTS=2\n#EXTINF:4,\ns12.ts\n",
+        );
+        let merged = previous.apply_delta_update(&delta).unwrap();
+        let segments = merged.media_segments();
+        let uris: Vec<_> = segments.iter().map(|s| s.uri.as_str()).collect();
+        assert_eq!(uris, ["s10.ts", "s11.ts", "s12.ts"]);
+        assert!(segments.iter().all(|s| s.key.is_some()));
+        assert_eq!(segments[0].sequence, 10);
+
+        // A delta that skips nothing is already complete.
+        let complete = parse("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\na.ts\n");
+        assert_eq!(previous.apply_delta_update(&complete).unwrap(), complete);
+
+        let too_far = parse(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:11\n\
+#EXT-X-SKIP:SKIPPED-SEGMENTS=3\n#EXTINF:4,\ns14.ts\n",
+        );
+        assert_eq!(
+            previous.apply_delta_update(&too_far),
+            Err(DeltaUpdateError::MissingSegment(12))
+        );
+        let too_early = parse(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:5\n\
+#EXT-X-SKIP:SKIPPED-SEGMENTS=1\n#EXTINF:4,\ns6.ts\n",
+        );
+        assert_eq!(
+            previous.apply_delta_update(&too_early),
+            Err(DeltaUpdateError::MissingSegment(5))
+        );
+        assert_eq!(
+            Playlist { tags: vec![] }.apply_delta_update(&too_early),
+            Err(DeltaUpdateError::MissingSegment(5))
+        );
+        assert_eq!(
+            delta.apply_delta_update(&delta),
+            Err(DeltaUpdateError::PreviousIsDeltaUpdate)
+        );
+        let twice =
+            parse("#EXTM3U\n#EXT-X-SKIP:SKIPPED-SEGMENTS=1\n#EXT-X-SKIP:SKIPPED-SEGMENTS=1\n");
+        assert_eq!(
+            previous.apply_delta_update(&twice),
+            Err(DeltaUpdateError::MultipleSkipTags)
+        );
+    }
+
+    #[test]
     fn test_validate_media_group_rules() {
         let media =
             |attributes: &str| format!("#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"g\",{attributes}\n");

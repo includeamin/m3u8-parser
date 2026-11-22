@@ -36,9 +36,11 @@
 //! - `Display` and `FromStr` convert a playlist to and from a string.
 //! - `media_segments(&self) -> Vec<MediaSegment>`: Returns the media segments with their effective state.
 //! - `total_duration`, `variants`, `variants_by_bandwidth`, `renditions` and `renditions_in_group`: Read-only views over durations, variant streams and renditions.
+//! - `apply_delta_update(&self, delta: &Playlist) -> Result<Playlist, DeltaUpdateError>`: Merges a Playlist Delta Update (`EXT-X-SKIP`) into the previously loaded playlist.
 //! - `validate(&self) -> Result<(), Vec<ValidationError>>`: Validates the playlist according to RFC 8216, returning any validation errors.
 
 pub mod builder;
+mod delta;
 mod helpers;
 mod resolve;
 mod variables;
