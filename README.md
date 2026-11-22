@@ -28,6 +28,10 @@ by draft-pantos-hls-rfc8216bis.
   `renditions` and `renditions_in_group`
 - Typed attribute values such as `ByteRange`, `Key`, `Map`, `KeyMethod`,
   `PlaylistType`, `Resolution`, `Codecs`, and numeric `TIME-OFFSET`, with `f64` durations
+- Typed rendition and stream attributes: `MediaType`, `ClosedCaptions`,
+  `InstreamId`, `Channels`, `Characteristics`, `LanguageTag`, `VideoRange`,
+  `HdcpLevel`, `PreloadHintType`, `HexSequence` for `SCTE35-*`, and `Define`
+  for `EXT-X-DEFINE`
 - Typed `EXT-X-PROGRAM-DATE-TIME` and `EXT-X-DATERANGE` `START-DATE` / `END-DATE`: `DateTime` parses ISO 8601 date-times into
   fields, converts to and from Unix timestamps, and keeps the text's precision
   when written back

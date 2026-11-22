@@ -1,4 +1,8 @@
 use crate::m3u8::datetime::DateTime;
+pub use crate::m3u8::values::{
+    Channels, Characteristics, ClosedCaptions, Define, HdcpLevel, HexSequence, InstreamId,
+    LanguageTag, MediaType, PreloadHintType, VideoRange,
+};
 
 /// Represents different types of tags found in an M3U8 playlist.
 ///
@@ -43,24 +47,24 @@ pub enum Tag {
     /// Represents a byte range.
     ExtXByteRange(ByteRange),
     /// Defines a custom tag with a specific value.
-    ExtXDefine(String),
+    ExtXDefine(Define),
     /// Represents media information.
     ExtXMedia {
-        type_: String,
+        type_: MediaType,
         group_id: String,
         name: Option<String>,
         uri: Option<String>,
         default: Option<bool>,
         autoselect: Option<bool>,
-        characteristics: Option<String>,
-        language: Option<String>,
-        instream_id: Option<String>,
+        characteristics: Option<Characteristics>,
+        language: Option<LanguageTag>,
+        instream_id: Option<InstreamId>,
         language_codec: Option<String>,
         forced: Option<bool>,
-        channels: Option<String>,
+        channels: Option<Channels>,
         /// Content steering pathway this rendition belongs to.
         pathway_id: Option<String>,
-        /// Unmodeled attributes (e.g. `VIDEO-RANGE`, `HDCP-LEVEL`), in input order.
+        /// Unmodeled attributes, in input order.
         extra_attributes: Vec<(String, AttributeValue)>,
     },
     /// Represents stream information.
@@ -73,10 +77,12 @@ pub enum Tag {
         audio: Option<String>,
         video: Option<String>,
         subtitle: Option<String>,
-        closed_captions: Option<String>,
+        closed_captions: Option<ClosedCaptions>,
+        video_range: Option<VideoRange>,
+        hdcp_level: Option<HdcpLevel>,
         /// Content steering pathway this variant belongs to.
         pathway_id: Option<String>,
-        /// Unmodeled attributes (e.g. `VIDEO-RANGE`, `HDCP-LEVEL`), in input order.
+        /// Unmodeled attributes, in input order.
         extra_attributes: Vec<(String, AttributeValue)>,
     },
     /// Represents an I-frame stream information.
@@ -86,10 +92,12 @@ pub enum Tag {
         codecs: Option<Codecs>,
         resolution: Option<Resolution>,
         frame_rate: Option<f64>,
+        video_range: Option<VideoRange>,
+        hdcp_level: Option<HdcpLevel>,
         uri: String,
         /// Content steering pathway this variant belongs to.
         pathway_id: Option<String>,
-        /// Unmodeled attributes (e.g. `VIDEO-RANGE`, `HDCP-LEVEL`), in input order.
+        /// Unmodeled attributes, in input order.
         extra_attributes: Vec<(String, AttributeValue)>,
     },
     /// Indicates a gap in the playlist.
@@ -104,9 +112,9 @@ pub enum Tag {
         duration: Option<f64>,
         planned_duration: Option<f64>,
         end_on_next: Option<bool>,
-        scte35_cmd: Option<String>,
-        scte35_out: Option<String>,
-        scte35_in: Option<String>,
+        scte35_cmd: Option<HexSequence>,
+        scte35_out: Option<HexSequence>,
+        scte35_in: Option<HexSequence>,
         /// `X-` client attributes and unrecognized attributes, in input order.
         extra_attributes: Vec<(String, AttributeValue)>,
     },
@@ -133,7 +141,7 @@ pub enum Tag {
     /// Represents a preload hint.
     ExtXPreloadHint {
         /// The hinted resource type, `PART` or `MAP`.
-        type_: String,
+        type_: PreloadHintType,
         uri: String,
         byterange_start: Option<u64>,
         byterange_length: Option<u64>,
@@ -165,7 +173,7 @@ pub enum Tag {
         id: String,
         value: Option<String>,
         uri: Option<String>,
-        language: Option<String>,
+        language: Option<LanguageTag>,
     },
     /// Encryption key information for a Master Playlist.
     ExtXSessionKey(Key),
@@ -600,6 +608,8 @@ impl std::fmt::Display for Tag {
                 video,
                 subtitle,
                 closed_captions,
+                video_range,
+                hdcp_level,
                 pathway_id,
                 extra_attributes,
             } => {
@@ -626,10 +636,18 @@ impl std::fmt::Display for Tag {
                     write!(f, ",SUBTITLES=\"{}\"", subtitle)?;
                 }
                 // NONE is an enumerated-string; group IDs are quoted-strings.
-                match closed_captions.as_deref() {
-                    Some("NONE") => write!(f, ",CLOSED-CAPTIONS=NONE")?,
-                    Some(closed_captions) => write!(f, ",CLOSED-CAPTIONS=\"{}\"", closed_captions)?,
+                match closed_captions {
+                    Some(ClosedCaptions::None) => write!(f, ",CLOSED-CAPTIONS=NONE")?,
+                    Some(ClosedCaptions::Group(group)) => {
+                        write!(f, ",CLOSED-CAPTIONS=\"{}\"", group)?
+                    }
                     None => {}
+                }
+                if let Some(video_range) = video_range {
+                    write!(f, ",VIDEO-RANGE={}", video_range)?;
+                }
+                if let Some(hdcp_level) = hdcp_level {
+                    write!(f, ",HDCP-LEVEL={}", hdcp_level)?;
                 }
                 if let Some(pathway_id) = pathway_id {
                     write!(f, ",PATHWAY-ID=\"{}\"", pathway_id)?;
@@ -642,6 +660,8 @@ impl std::fmt::Display for Tag {
                 codecs,
                 resolution,
                 frame_rate,
+                video_range,
+                hdcp_level,
                 uri,
                 pathway_id,
                 extra_attributes,
@@ -658,6 +678,12 @@ impl std::fmt::Display for Tag {
                 }
                 if let Some(frame_rate) = frame_rate {
                     write!(f, ",FRAME-RATE={}", frame_rate)?;
+                }
+                if let Some(video_range) = video_range {
+                    write!(f, ",VIDEO-RANGE={}", video_range)?;
+                }
+                if let Some(hdcp_level) = hdcp_level {
+                    write!(f, ",HDCP-LEVEL={}", hdcp_level)?;
                 }
                 write!(f, ",URI=\"{}\"", uri)?;
                 if let Some(pathway_id) = pathway_id {

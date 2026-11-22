@@ -115,6 +115,10 @@ pub enum ValidationError {
     /// Error indicating that a CODECS attribute is invalid.
     InvalidCodecs(String),
 
+    /// Error indicating that a `LANGUAGE` attribute is not a well-formed RFC 5646
+    /// language tag. Holds the tag.
+    InvalidLanguage(String),
+
     /// Error indicating that EXT-X-SERVER-CONTROL hold-back values are too short
     /// for the playlist's target durations.
     InvalidServerControl(String),

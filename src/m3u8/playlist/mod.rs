@@ -53,7 +53,10 @@ use crate::m3u8::parser::{
     attribute, extra_attributes, optional_boolean, optional_parsed, optional_string,
     parse_attribute_list, required_parsed, required_string, Attribute,
 };
-use crate::m3u8::tags::{ByteRange, Codecs, Key, KeyMethod, Map, Tag};
+use crate::m3u8::tags::{
+    ByteRange, Characteristics, ClosedCaptions, Codecs, Define, HdcpLevel, InstreamId, Key,
+    KeyMethod, LanguageTag, Map, MediaType, PreloadHintType, Tag, VideoRange,
+};
 use crate::m3u8::validation::ValidationError;
 use std::collections::HashSet;
 use std::fs::File;
@@ -349,15 +352,24 @@ impl Playlist {
                 name,
                 uri,
                 instream_id,
+                language,
                 ..
             } => {
-                if type_.is_empty()
+                if type_.as_str().is_empty()
                     || group_id.is_empty()
                     || name.as_deref().is_none_or(str::is_empty)
                 {
                     errors.push(ValidationError::MissingMediaFields);
                 }
-                if type_ == "CLOSED-CAPTIONS" {
+                if let Some(language) = language.as_ref().filter(|language| !language.is_valid()) {
+                    errors.push(ValidationError::InvalidLanguage(language.to_string()));
+                }
+                if instream_id.as_ref().is_some_and(|id| !id.is_valid()) {
+                    errors.push(ValidationError::InvalidMediaAttributes(
+                        "INSTREAM-ID must be CC1 to CC4 or SERVICE1 to SERVICE63".to_string(),
+                    ));
+                }
+                if *type_ == MediaType::ClosedCaptions {
                     if instream_id.is_none() {
                         errors.push(ValidationError::InvalidMediaAttributes(
                             "TYPE=CLOSED-CAPTIONS requires INSTREAM-ID".to_string(),
@@ -416,6 +428,12 @@ impl Playlist {
                     ));
                 }
             }
+            Tag::ExtXSessionData {
+                language: Some(language),
+                ..
+            } if !language.is_valid() => {
+                errors.push(ValidationError::InvalidLanguage(language.to_string()));
+            }
             Tag::ExtXPreloadHint { uri, .. } if uri.is_empty() => {
                 errors.push(ValidationError::InvalidPreloadHintUri);
             }
@@ -452,7 +470,7 @@ impl Playlist {
                 {
                     errors.push(ValidationError::DuplicateSessionData {
                         id: id.clone(),
-                        language: language.clone(),
+                        language: language.as_ref().map(ToString::to_string),
                     });
                 }
                 Tag::ExtXMedia {
@@ -482,7 +500,7 @@ impl Playlist {
                                 .to_string(),
                         ));
                     }
-                    if forced.is_some() && type_ != "SUBTITLES" {
+                    if forced.is_some() && *type_ != MediaType::Subtitles {
                         errors.push(ValidationError::InvalidMediaAttributes(
                             "FORCED is only allowed with TYPE=SUBTITLES".to_string(),
                         ));
@@ -611,10 +629,17 @@ impl Playlist {
             } = tag
             {
                 for (attribute, group_id, media_type) in [
-                    ("AUDIO", audio, "AUDIO"),
-                    ("VIDEO", video, "VIDEO"),
-                    ("SUBTITLES", subtitle, "SUBTITLES"),
-                    ("CLOSED-CAPTIONS", closed_captions, "CLOSED-CAPTIONS"),
+                    ("AUDIO", audio.as_deref(), MediaType::Audio),
+                    ("VIDEO", video.as_deref(), MediaType::Video),
+                    ("SUBTITLES", subtitle.as_deref(), MediaType::Subtitles),
+                    (
+                        "CLOSED-CAPTIONS",
+                        match closed_captions {
+                            Some(ClosedCaptions::Group(group)) => Some(group.as_str()),
+                            _ => None,
+                        },
+                        MediaType::ClosedCaptions,
+                    ),
                 ] {
                     if let Some(group_id) = group_id {
                         if group_id != "NONE"
@@ -625,13 +650,13 @@ impl Playlist {
                                         type_,
                                         group_id: candidate_group_id,
                                         ..
-                                    } if type_ == media_type && candidate_group_id == group_id
+                                    } if *type_ == media_type && candidate_group_id == group_id
                                 )
                             })
                         {
                             errors.push(ValidationError::UnresolvedRenditionGroup {
                                 attribute: attribute.to_string(),
-                                group_id: group_id.clone(),
+                                group_id: group_id.to_string(),
                             });
                         }
                     }
@@ -789,10 +814,7 @@ fn parse_tag(line: &str) -> Result<Option<Tag>, SyntaxError> {
         ("EXT-X-BYTERANGE", Some(value)) => {
             Tag::ExtXByteRange(parse_value(value, "EXT-X-BYTERANGE")?)
         }
-        ("EXT-X-DEFINE", Some(value)) => {
-            attributes()?;
-            Tag::ExtXDefine(value.to_string())
-        }
+        ("EXT-X-DEFINE", Some(_)) => parse_define(&attributes()?)?,
         ("EXT-X-KEY", Some(_)) => Tag::ExtXKey(parse_key(&attributes()?, "EXT-X-KEY")?),
         ("EXT-X-SESSION-KEY", Some(_)) => {
             Tag::ExtXSessionKey(parse_key(&attributes()?, "EXT-X-SESSION-KEY")?)
@@ -894,9 +916,9 @@ fn parse_date_range(attributes: Vec<Attribute>) -> Result<Tag, SyntaxError> {
                     }
                 })
             }
-            "SCTE35-CMD" => scte35_cmd = Some(value),
-            "SCTE35-OUT" => scte35_out = Some(value),
-            "SCTE35-IN" => scte35_in = Some(value),
+            "SCTE35-CMD" => scte35_cmd = Some(parse_attribute_value(&value, TAG, "SCTE35-CMD")?),
+            "SCTE35-OUT" => scte35_out = Some(parse_attribute_value(&value, TAG, "SCTE35-OUT")?),
+            "SCTE35-IN" => scte35_in = Some(parse_attribute_value(&value, TAG, "SCTE35-IN")?),
             // X- client attributes and attributes from newer revisions of the
             // spec are preserved as written so they round-trip.
             _ => extra_attributes.push((attribute.name.clone(), attribute.into_value())),
@@ -939,6 +961,23 @@ fn parse_attribute_value<T: std::str::FromStr>(
         })
 }
 
+fn parse_define(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
+    const TAG: &str = "EXT-X-DEFINE";
+    let get = |name| optional_string(attributes, name);
+    let define = match (get("NAME"), get("VALUE"), get("IMPORT"), get("QUERYPARAM")) {
+        (Some(name), Some(value), None, None) => Define::Value { name, value },
+        (None, None, Some(name), None) => Define::Import(name),
+        (None, None, None, Some(name)) => Define::QueryParam(name),
+        _ => {
+            return Err(SyntaxError::ConflictingAttributes {
+                tag: TAG,
+                reason: "exactly one of NAME with VALUE, IMPORT, or QUERYPARAM is required",
+            })
+        }
+    };
+    Ok(Tag::ExtXDefine(define))
+}
+
 fn parse_start(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     Ok(Tag::ExtXStart {
         time_offset: required_parsed(attributes, "TIME-OFFSET", "EXT-X-START")?,
@@ -957,7 +996,12 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         audio: optional_string(attributes, "AUDIO"),
         video: optional_string(attributes, "VIDEO"),
         subtitle: optional_string(attributes, "SUBTITLES"),
-        closed_captions: optional_string(attributes, "CLOSED-CAPTIONS"),
+        closed_captions: optional_string(attributes, "CLOSED-CAPTIONS")
+            .map(|closed_captions| ClosedCaptions::from(closed_captions.as_str())),
+        video_range: optional_string(attributes, "VIDEO-RANGE")
+            .map(|range| VideoRange::from(range.as_str())),
+        hdcp_level: optional_string(attributes, "HDCP-LEVEL")
+            .map(|level| HdcpLevel::from(level.as_str())),
         pathway_id: optional_string(attributes, "PATHWAY-ID"),
         extra_attributes: extra_attributes(
             attributes,
@@ -971,6 +1015,8 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
                 "VIDEO",
                 "SUBTITLES",
                 "CLOSED-CAPTIONS",
+                "VIDEO-RANGE",
+                "HDCP-LEVEL",
                 "PATHWAY-ID",
             ],
         ),
@@ -985,6 +1031,10 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
         codecs: optional_string(attributes, "CODECS").map(|codecs| Codecs::from(codecs.as_str())),
         resolution: optional_parsed(attributes, "RESOLUTION", TAG)?,
         frame_rate: optional_parsed(attributes, "FRAME-RATE", TAG)?,
+        video_range: optional_string(attributes, "VIDEO-RANGE")
+            .map(|range| VideoRange::from(range.as_str())),
+        hdcp_level: optional_string(attributes, "HDCP-LEVEL")
+            .map(|level| HdcpLevel::from(level.as_str())),
         uri: required_string(attributes, "URI", TAG)?,
         pathway_id: optional_string(attributes, "PATHWAY-ID"),
         extra_attributes: extra_attributes(
@@ -995,6 +1045,8 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
                 "CODECS",
                 "RESOLUTION",
                 "FRAME-RATE",
+                "VIDEO-RANGE",
+                "HDCP-LEVEL",
                 "URI",
                 "PATHWAY-ID",
             ],
@@ -1005,18 +1057,21 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
 fn parse_media(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     const TAG: &str = "EXT-X-MEDIA";
     Ok(Tag::ExtXMedia {
-        type_: required_string(attributes, "TYPE", TAG)?,
+        type_: MediaType::from(required_string(attributes, "TYPE", TAG)?.as_str()),
         group_id: required_string(attributes, "GROUP-ID", TAG)?,
         name: Some(required_string(attributes, "NAME", TAG)?),
         uri: optional_string(attributes, "URI"),
         default: optional_boolean(attributes, "DEFAULT", TAG)?,
         autoselect: optional_boolean(attributes, "AUTOSELECT", TAG)?,
-        characteristics: optional_string(attributes, "CHARACTERISTICS"),
-        language: optional_string(attributes, "LANGUAGE"),
-        instream_id: optional_string(attributes, "INSTREAM-ID"),
+        characteristics: optional_string(attributes, "CHARACTERISTICS")
+            .map(|characteristics| Characteristics::from(characteristics.as_str())),
+        language: optional_string(attributes, "LANGUAGE")
+            .map(|language| LanguageTag::from(language.as_str())),
+        instream_id: optional_string(attributes, "INSTREAM-ID")
+            .map(|id| InstreamId::from(id.as_str())),
         language_codec: optional_string(attributes, "LANGUAGE-CODEC"),
         forced: optional_boolean(attributes, "FORCED", TAG)?,
-        channels: optional_string(attributes, "CHANNELS"),
+        channels: optional_parsed(attributes, "CHANNELS", TAG)?,
         pathway_id: optional_string(attributes, "PATHWAY-ID"),
         extra_attributes: extra_attributes(
             attributes,
@@ -1054,7 +1109,8 @@ fn parse_session_data(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
         id,
         value,
         uri,
-        language: optional_string(attributes, "LANGUAGE"),
+        language: optional_string(attributes, "LANGUAGE")
+            .map(|language| LanguageTag::from(language.as_str())),
     })
 }
 
@@ -1098,7 +1154,7 @@ fn parse_skip(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
 fn parse_preload_hint(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     const TAG: &str = "EXT-X-PRELOAD-HINT";
     Ok(Tag::ExtXPreloadHint {
-        type_: required_string(attributes, "TYPE", TAG)?,
+        type_: PreloadHintType::from(required_string(attributes, "TYPE", TAG)?.as_str()),
         uri: required_string(attributes, "URI", TAG)?,
         byterange_start: optional_parsed(attributes, "BYTERANGE-START", TAG)?,
         byterange_length: optional_parsed(attributes, "BYTERANGE-LENGTH", TAG)?,
@@ -1240,14 +1296,11 @@ fn minimum_version(tag: &Tag, has_i_frames_only: bool) -> Option<u8> {
         Tag::ExtXMap(_) if has_i_frames_only => Some(5),
         Tag::ExtXMap(_) => Some(6),
         Tag::ExtXMedia {
-            instream_id: Some(instream_id),
+            instream_id: Some(InstreamId::Service(_)),
             ..
-        } if instream_id.starts_with("SERVICE") => Some(7),
-        Tag::ExtXDefine(value) => {
-            let has_query_param = parse_attribute_list(value)
-                .is_ok_and(|attributes| attributes.iter().any(|a| a.name == "QUERYPARAM"));
-            Some(if has_query_param { 11 } else { 8 })
-        }
+        } => Some(7),
+        Tag::ExtXDefine(Define::QueryParam(_)) => Some(11),
+        Tag::ExtXDefine(_) => Some(8),
         Tag::ExtXSkip {
             recently_removed_dateranges: Some(_),
             ..

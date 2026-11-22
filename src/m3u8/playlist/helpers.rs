@@ -1,7 +1,10 @@
 //! Read-only views over a playlist: total duration, variants and renditions.
 
 use super::Playlist;
-use crate::m3u8::tags::{Codecs, Resolution, Tag};
+use crate::m3u8::tags::{
+    Channels, Characteristics, ClosedCaptions, Codecs, HdcpLevel, InstreamId, LanguageTag,
+    MediaType, Resolution, Tag, VideoRange,
+};
 
 /// A variant stream of a Multivariant Playlist: an EXT-X-STREAM-INF tag and the
 /// URI line that follows it.
@@ -20,25 +23,26 @@ pub struct Variant {
     /// The `SUBTITLES` rendition group.
     pub subtitles: Option<String>,
     /// The `CLOSED-CAPTIONS` rendition group, or `NONE`.
-    pub closed_captions: Option<String>,
+    pub closed_captions: Option<ClosedCaptions>,
+    pub video_range: Option<VideoRange>,
+    pub hdcp_level: Option<HdcpLevel>,
     pub pathway_id: Option<String>,
 }
 
 /// An alternative rendition declared by an EXT-X-MEDIA tag.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Rendition {
-    /// `AUDIO`, `VIDEO`, `SUBTITLES`, or `CLOSED-CAPTIONS`.
-    pub type_: String,
+    pub type_: MediaType,
     pub group_id: String,
     pub name: Option<String>,
     pub uri: Option<String>,
-    pub language: Option<String>,
+    pub language: Option<LanguageTag>,
     pub default: bool,
     pub autoselect: bool,
     pub forced: bool,
-    pub characteristics: Option<String>,
-    pub instream_id: Option<String>,
-    pub channels: Option<String>,
+    pub characteristics: Option<Characteristics>,
+    pub instream_id: Option<InstreamId>,
+    pub channels: Option<Channels>,
     pub pathway_id: Option<String>,
 }
 
@@ -72,6 +76,8 @@ impl Playlist {
                     video,
                     subtitle,
                     closed_captions,
+                    video_range,
+                    hdcp_level,
                     pathway_id,
                     ..
                 },
@@ -89,6 +95,8 @@ impl Playlist {
                     video: video.clone(),
                     subtitles: subtitle.clone(),
                     closed_captions: closed_captions.clone(),
+                    video_range: video_range.clone(),
+                    hdcp_level: hdcp_level.clone(),
                     pathway_id: pathway_id.clone(),
                 });
             }
@@ -144,7 +152,12 @@ impl Playlist {
 
     /// The renditions of one group, for example the ones a variant's
     /// [`audio`](Variant::audio) group refers to.
-    pub fn renditions_in_group(&self, type_: &str, group_id: &str) -> Vec<Rendition> {
+    pub fn renditions_in_group(
+        &self,
+        type_: impl Into<MediaType>,
+        group_id: &str,
+    ) -> Vec<Rendition> {
+        let type_ = type_.into();
         let mut renditions = self.renditions();
         renditions.retain(|rendition| rendition.type_ == type_ && rendition.group_id == group_id);
         renditions

@@ -2,8 +2,7 @@
 
 use super::Playlist;
 use crate::m3u8::error::SubstitutionError;
-use crate::m3u8::parser::{attribute, parse_attribute_list};
-use crate::m3u8::tags::Tag;
+use crate::m3u8::tags::{Define, Tag};
 use std::collections::HashMap;
 
 impl Playlist {
@@ -23,27 +22,23 @@ impl Playlist {
             let Tag::ExtXDefine(definition) = tag else {
                 continue;
             };
-            let invalid = || SubstitutionError::InvalidDefine(definition.clone());
-            let attributes = parse_attribute_list(definition).map_err(|_| invalid())?;
-            let get = |name| attribute(&attributes, name).map(str::to_owned);
+            let invalid = || SubstitutionError::InvalidDefine(definition.to_string());
 
-            let (name, value) = match (get("NAME"), get("VALUE"), get("IMPORT"), get("QUERYPARAM"))
-            {
-                (Some(name), Some(value), None, None) => (name, value),
-                (None, None, Some(name), None) => {
+            let (name, value) = match definition {
+                Define::Value { name, value } => (name.clone(), value.clone()),
+                Define::Import(name) => {
                     let value = imports
-                        .get(&name)
+                        .get(name)
                         .cloned()
                         .ok_or_else(|| SubstitutionError::MissingImport(name.clone()))?;
-                    (name, value)
+                    (name.clone(), value)
                 }
-                (None, None, None, Some(name)) => {
+                Define::QueryParam(name) => {
                     let value = query
-                        .and_then(|query| query_parameter(query, &name))
+                        .and_then(|query| query_parameter(query, name))
                         .ok_or_else(|| SubstitutionError::MissingQueryParameter(name.clone()))?;
-                    (name, value)
+                    (name.clone(), value)
                 }
-                _ => return Err(invalid()),
             };
 
             let valid_name = !name.is_empty()
