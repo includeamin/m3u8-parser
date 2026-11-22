@@ -22,6 +22,8 @@ by draft-pantos-hls-rfc8216bis.
   `uri::resolve_uri` (RFC 3986 section 5, no extra dependencies)
 - Merge Playlist Delta Updates (`EXT-X-SKIP`) into the previous playlist with
   `Playlist::apply_delta_update`
+- Low-latency partial segments: `MediaSegment::parts`, `Playlist::pending_parts`
+  and `Playlist::latest_part_position`
 - Convenience views: `total_duration`, `variants`, `variants_by_bandwidth`,
   `renditions` and `renditions_in_group`
 - Typed attribute values such as `ByteRange`, `Key`, `Map`, `KeyMethod`,
