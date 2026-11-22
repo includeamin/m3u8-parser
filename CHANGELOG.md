@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.0] - 2026-11-22
+
+### 🚀 Features
+
+- [**breaking**] `EXT-X-DATERANGE` `START-DATE` and `END-DATE` are now `DateTime`, `PlaylistBuilder::date_range` takes a `DateTime`, and `ValidationError::InvalidDateRangeStartDate` and `InvalidDateRangeEndDate` are removed
+- Validation reports a date range whose `END-DATE` is earlier than its `START-DATE`, and `DateTime::unix_timestamp_nanos` is added for comparing instants
+- [**breaking**] Add typed `MediaType`, `PreloadHintType`, `ClosedCaptions`, `InstreamId`, `Channels`, `Characteristics`, `LanguageTag`, `VideoRange`, `HdcpLevel` and `HexSequence` values, used by the tags, `Variant`, `Rendition` and the builder
+- [**breaking**] `VIDEO-RANGE` and `HDCP-LEVEL` are now the `video_range` and `hdcp_level` fields of `EXT-X-STREAM-INF` and `EXT-X-I-FRAME-STREAM-INF` instead of `extra_attributes`
+- [**breaking**] `EXT-X-DEFINE` is now a typed `Define` of `Value`, `Import` or `QueryParam`, and `PlaylistBuilder::define` takes one
+- Add `ValidationError::InvalidLanguage`, and report a malformed `INSTREAM-ID` through `InvalidMediaAttributes`
+
+### 🔄 Changes
+
+- [**breaking**] Invalid `START-DATE` and `END-DATE` values, a non-numeric `CHANNELS` count, malformed `SCTE35-*` hex sequences and an `EXT-X-DEFINE` that is not exactly one form now fail at parse time with a `SyntaxError`; a malformed `EXT-X-DEFINE` was previously `SubstitutionError::InvalidDefine`
+- `EXT-X-DEFINE` no longer keeps unknown attributes
+
 ## [0.16.0] - 2026-11-22
 
 ### 🚀 Features
