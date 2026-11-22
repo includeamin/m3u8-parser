@@ -40,11 +40,11 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXDateRange` tag with only its required attributes.
-    pub fn date_range(self, id: &str, start_date: &str) -> Self {
+    pub fn date_range(self, id: &str, start_date: DateTime) -> Self {
         self.tag(Tag::ExtXDateRange {
             id: id.to_string(),
             class: None,
-            start_date: start_date.to_string(),
+            start_date,
             cue: None,
             end_date: None,
             duration: None,

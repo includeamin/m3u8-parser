@@ -28,7 +28,7 @@ by draft-pantos-hls-rfc8216bis.
   `renditions` and `renditions_in_group`
 - Typed attribute values such as `ByteRange`, `Key`, `Map`, `KeyMethod`,
   `PlaylistType`, `Resolution`, `Codecs`, and numeric `TIME-OFFSET`, with `f64` durations
-- Typed `EXT-X-PROGRAM-DATE-TIME`: `DateTime` parses ISO 8601 date-times into
+- Typed `EXT-X-PROGRAM-DATE-TIME` and `EXT-X-DATERANGE` `START-DATE` / `END-DATE`: `DateTime` parses ISO 8601 date-times into
   fields, converts to and from Unix timestamps, and keeps the text's precision
   when written back
 - Derive `MediaSegment` values from a playlist with the media sequence number,

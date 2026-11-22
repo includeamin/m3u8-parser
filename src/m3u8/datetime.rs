@@ -179,6 +179,14 @@ impl DateTime {
     }
 }
 
+impl DateTime {
+    /// Nanoseconds since the Unix epoch, for comparing two date-times. A date-time
+    /// with no zone is read as UTC.
+    pub fn unix_timestamp_nanos(&self) -> i128 {
+        i128::from(self.unix_timestamp()) * 1_000_000_000 + i128::from(self.nanosecond)
+    }
+}
+
 impl fmt::Display for DateTime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

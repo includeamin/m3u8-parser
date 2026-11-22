@@ -98,9 +98,9 @@ pub enum Tag {
     ExtXDateRange {
         id: String,
         class: Option<String>,
-        start_date: String,
+        start_date: DateTime,
         cue: Option<String>,
-        end_date: Option<String>,
+        end_date: Option<DateTime>,
         duration: Option<f64>,
         planned_duration: Option<f64>,
         end_on_next: Option<bool>,

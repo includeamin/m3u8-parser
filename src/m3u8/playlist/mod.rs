@@ -387,14 +387,12 @@ impl Playlist {
                 if id.is_empty() {
                     errors.push(ValidationError::InvalidDateRangeId);
                 }
-                if !is_date_time(start_date) {
-                    errors.push(ValidationError::InvalidDateRangeStartDate);
-                }
-                if end_date
-                    .as_deref()
-                    .is_some_and(|end_date| !is_date_time(end_date))
-                {
-                    errors.push(ValidationError::InvalidDateRangeEndDate);
+                if end_date.is_some_and(|end_date| {
+                    end_date.unix_timestamp_nanos() < start_date.unix_timestamp_nanos()
+                }) {
+                    errors.push(ValidationError::InvalidDateRangeAttributes(
+                        "END-DATE must not be earlier than START-DATE".to_string(),
+                    ));
                 }
                 if let Some(duration) = duration {
                     if !duration.is_finite() || *duration < 0.0 {
@@ -876,9 +874,9 @@ fn parse_date_range(attributes: Vec<Attribute>) -> Result<Tag, SyntaxError> {
         match attribute.name.as_str() {
             "ID" => id = Some(value),
             "CLASS" => class = Some(value),
-            "START-DATE" => start_date = Some(value),
+            "START-DATE" => start_date = Some(parse_attribute_value(&value, TAG, "START-DATE")?),
             "CUE" => cue = Some(value),
-            "END-DATE" => end_date = Some(value),
+            "END-DATE" => end_date = Some(parse_attribute_value(&value, TAG, "END-DATE")?),
             "DURATION" => duration = Some(parse_attribute_value(&value, TAG, "DURATION")?),
             "PLANNED-DURATION" => {
                 planned_duration = Some(parse_attribute_value(&value, TAG, "PLANNED-DURATION")?)
@@ -1114,11 +1112,6 @@ fn parse_rendition_report(attributes: &[Attribute]) -> Result<Tag, SyntaxError> 
         last_msn: optional_parsed(attributes, "LAST-MSN", TAG)?,
         last_part: optional_parsed(attributes, "LAST-PART", TAG)?,
     })
-}
-
-/// Checks the ISO 8601 date-time form HLS uses, e.g. `2010-02-19T14:54:23.031+08:00`.
-fn is_date_time(value: &str) -> bool {
-    value.parse::<DateTime>().is_ok()
 }
 
 /// Writing has no escape mechanism, so a string holding a newline or a quote can

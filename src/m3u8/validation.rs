@@ -68,12 +68,6 @@ pub enum ValidationError {
     /// Error indicating that the ID specified in a date range is invalid.
     InvalidDateRangeId,
 
-    /// Error indicating that the start date specified in a date range is invalid.
-    InvalidDateRangeStartDate,
-
-    /// Error indicating that the end date specified in a date range is invalid.
-    InvalidDateRangeEndDate,
-
     /// Error indicating that the planned duration specified in a date range is invalid.
     ///
     /// # Arguments

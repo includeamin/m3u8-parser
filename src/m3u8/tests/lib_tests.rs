@@ -395,7 +395,7 @@ seg2.ts
             Tag::ExtXDateRange {
                 id: "splice-6FFFFFF0".to_string(),
                 class: None,
-                start_date: "2014-03-05T11:15:00Z".to_string(),
+                start_date: "2014-03-05T11:15:00Z".parse().unwrap(),
                 cue: Some("PRE,ONCE".to_string()),
                 end_date: None,
                 duration: None,
@@ -848,7 +848,7 @@ https://media.example.com/third.ts
                 Tag::ExtXDateRange {
                     id: "ad-1".to_string(),
                     class: Some("com.example.ad".to_string()),
-                    start_date: "2020-01-01T00:00:00Z".to_string(),
+                    start_date: "2020-01-01T00:00:00Z".parse().unwrap(),
                     cue: None,
                     end_date: None,
                     duration: None,
@@ -1278,7 +1278,7 @@ https://media.example.com/third.ts
                 Tag::ExtXDateRange {
                     id: "ad-1".to_string(),
                     class: None,
-                    start_date: "2024-01-01T00:00:00Z".to_string(),
+                    start_date: "2024-01-01T00:00:00Z".parse().unwrap(),
                     cue: None,
                     end_date: None,
                     duration: Some(30.0),
@@ -1761,7 +1761,7 @@ third.ts
                 Tag::ExtXDateRange {
                     id: "ad".to_string(),
                     class: None,
-                    start_date: "2024-01-01T00:00:00Z".to_string(),
+                    start_date: "2024-01-01T00:00:00Z".parse().unwrap(),
                     cue: None,
                     end_date: None,
                     duration: None,
@@ -1854,7 +1854,7 @@ third.ts
                 Tag::ExtXDateRange {
                     id: "ad".to_string(),
                     class: None,
-                    start_date: "2024-01-01T00:00:00Z".to_string(),
+                    start_date: "2024-01-01T00:00:00Z".parse().unwrap(),
                     cue: None,
                     end_date: None,
                     duration: None,
@@ -2036,46 +2036,83 @@ media.mp4
     }
 
     #[test]
-    fn test_validate_date_time_formats() {
-        let date_range = |start_date: &str, end_date: Option<&str>| Tag::ExtXDateRange {
-            id: "ad".to_string(),
-            class: None,
-            start_date: start_date.to_string(),
-            cue: None,
-            end_date: end_date.map(str::to_string),
-            duration: None,
-            planned_duration: None,
-            end_on_next: None,
-            scte35_cmd: None,
-            scte35_out: None,
-            scte35_in: None,
-            extra_attributes: Vec::new(),
-        };
+    fn test_validate_program_date_time_formats() {
         let valid = Playlist {
             tags: vec![
                 Tag::ExtM3U,
                 Tag::ExtXTargetDuration(10),
                 Tag::ExtXProgramDateTime("2010-02-19T14:54:23.031+08:00".parse().unwrap()),
-                date_range("2024-01-01T00:00:00Z", Some("2024-01-01T00:00:30.5Z")),
                 Tag::ExtXProgramDateTime("2024-12-31T23:59:60-0500".parse().unwrap()),
             ],
         };
-        let invalid = Playlist {
-            tags: vec![
-                Tag::ExtM3U,
-                Tag::ExtXTargetDuration(10),
-                date_range("2024-13-01T00:00:00Z", Some("2024-01-01 00:00:00Z")),
-            ],
-        };
-
         assert_eq!(valid.validate(), Ok(()));
+    }
+
+    #[test]
+    fn test_daterange_dates_are_typed() {
+        let data = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n\
+#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T00:00:00.000Z\",END-DATE=\"2024-01-01T00:00:30.5+00:00\"\n";
+        let playlist: Playlist = data.parse().unwrap();
+        let Tag::ExtXDateRange {
+            start_date,
+            end_date: Some(end_date),
+            ..
+        } = &playlist.tags[2]
+        else {
+            panic!("expected a date range with an end date");
+        };
+        assert_eq!(start_date.unix_timestamp(), 1_704_067_200);
+        assert_eq!(end_date.unix_timestamp(), 1_704_067_230);
+        assert_eq!(end_date.nanosecond(), 500_000_000);
+        assert_eq!(playlist.validate(), Ok(()));
         assert_eq!(
-            invalid.validate(),
-            Err(vec![
-                ValidationError::InvalidDateRangeStartDate,
-                ValidationError::InvalidDateRangeEndDate,
-            ])
+            playlist.tags[2].to_string(),
+            "#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T00:00:00.000Z\",END-DATE=\"2024-01-01T00:00:30.5Z\""
         );
+    }
+
+    #[test]
+    fn test_parse_rejects_invalid_daterange_dates() {
+        for (attribute, value) in [
+            ("START-DATE", "2024-13-01T00:00:00Z"),
+            ("START-DATE", "yesterday"),
+            ("END-DATE", "2024-01-01 00:00:00Z"),
+        ] {
+            let other = if attribute == "START-DATE" {
+                String::new()
+            } else {
+                ",START-DATE=\"2024-01-01T00:00:00Z\"".to_string()
+            };
+            let data =
+                format!("#EXTM3U\n#EXT-X-DATERANGE:ID=\"ad\"{other},{attribute}=\"{value}\"\n");
+            let (line, error) = syntax_error(&data);
+            assert_eq!(line, 2);
+            assert!(
+                matches!(
+                    &error,
+                    SyntaxError::InvalidAttributeValue { attribute: found, .. } if *found == attribute
+                ),
+                "{attribute}={value}: {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_daterange_end_before_start() {
+        let playlist: Playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n\
+#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T00:00:10Z\",END-DATE=\"2024-01-01T00:00:09.999Z\"\n"
+            .parse()
+            .unwrap();
+        assert!(matches!(
+            playlist.validate().unwrap_err().as_slice(),
+            [ValidationError::InvalidDateRangeAttributes(_)]
+        ));
+
+        let equal: Playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n\
+#EXT-X-DATERANGE:ID=\"ad\",START-DATE=\"2024-01-01T02:00:10+02:00\",END-DATE=\"2024-01-01T00:00:10Z\"\n"
+            .parse()
+            .unwrap();
+        assert_eq!(equal.validate(), Ok(()));
     }
 
     #[test]
@@ -2129,7 +2166,7 @@ media.mp4
             .server_control(Some(24.0), Some(2.0), true)
             .part_inf(1.0)
             .skip(3)
-            .date_range("ad-1", "2024-01-01T00:00:00Z")
+            .date_range("ad-1", "2024-01-01T00:00:00Z".parse().unwrap())
             .part("seg1.0.mp4", 1.0)
             .extinf("seg1.mp4", 4.0, None)
             .discontinuity()
