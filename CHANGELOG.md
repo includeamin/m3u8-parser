@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.0] - 2026-11-22
+
+### 🚀 Features
+
+- [**breaking**] Add `MediaSegment::parts`, the `Part` partial segments that precede each segment's `EXTINF`
+- Add `Playlist::pending_parts`, `pending_segment_sequence` and `latest_part_position` for the segment still being produced and the newest part's `PartPosition`
+
+### 🐛 Bug Fixes
+
+- `media_segments` now adds `SKIPPED-SEGMENTS` to the sequence at an `EXT-X-SKIP`, so the segments of a delta playlist are numbered correctly
+
 ## [0.13.0] - 2026-11-22
 
 ### 🚀 Features
