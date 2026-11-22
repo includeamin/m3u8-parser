@@ -1,3 +1,4 @@
+use crate::m3u8::datetime::DateTime;
 use crate::m3u8::playlist::Playlist;
 use crate::m3u8::tags::{ByteRange, Key, KeyMethod, Map, PlaylistType, Resolution, Tag};
 use crate::m3u8::validation::ValidationError;
@@ -188,8 +189,8 @@ impl PlaylistBuilder {
     }
 
     /// Adds an `ExtXProgramDateTime` tag.
-    pub fn program_date_time(self, date_time: &str) -> Self {
-        self.tag(Tag::ExtXProgramDateTime(date_time.to_string()))
+    pub fn program_date_time(self, date_time: DateTime) -> Self {
+        self.tag(Tag::ExtXProgramDateTime(date_time))
     }
 
     /// Adds an `ExtXGap` tag.

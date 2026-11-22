@@ -65,9 +65,6 @@ pub enum ValidationError {
     /// Error indicating that the URI specified in a map tag is invalid.
     InvalidMapUri,
 
-    /// Error indicating that the program date and time specified is invalid.
-    InvalidProgramDateTime,
-
     /// Error indicating that the ID specified in a date range is invalid.
     InvalidDateRangeId,
 

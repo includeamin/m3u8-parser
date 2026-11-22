@@ -1,3 +1,5 @@
+use crate::m3u8::datetime::DateTime;
+
 /// Represents different types of tags found in an M3U8 playlist.
 ///
 /// Each variant corresponds to a specific type of tag defined in the M3U8 specification.
@@ -37,7 +39,7 @@ pub enum Tag {
     /// Represents a mapping to an initialization segment.
     ExtXMap(Map),
     /// Specifies the program date and time.
-    ExtXProgramDateTime(String),
+    ExtXProgramDateTime(DateTime),
     /// Represents a byte range.
     ExtXByteRange(ByteRange),
     /// Defines a custom tag with a specific value.

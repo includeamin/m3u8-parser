@@ -47,6 +47,7 @@ mod parts;
 mod resolve;
 mod variables;
 
+use crate::m3u8::datetime::DateTime;
 use crate::m3u8::error::{ParseError, SyntaxError};
 use crate::m3u8::parser::{
     attribute, extra_attributes, optional_boolean, optional_parsed, optional_string,
@@ -87,7 +88,7 @@ pub struct MediaSegment {
     pub key: Option<Key>,
     pub map: Option<Map>,
     pub byterange: Option<ByteRange>,
-    pub program_date_time: Option<String>,
+    pub program_date_time: Option<DateTime>,
     pub gap: bool,
     /// The Partial Segments that precede this segment's `EXTINF`.
     pub parts: Vec<Part>,
@@ -213,7 +214,7 @@ impl Playlist {
                 }
                 Tag::ExtXMap(value) => map = Some(value.clone()),
                 Tag::ExtXByteRange(value) => byterange = Some(*value),
-                Tag::ExtXProgramDateTime(value) => program_date_time = Some(value.clone()),
+                Tag::ExtXProgramDateTime(value) => program_date_time = Some(*value),
                 Tag::ExtXGap => gap = true,
                 Tag::ExtInf {
                     uri,
@@ -356,9 +357,6 @@ impl Playlist {
                         "INSTREAM-ID is only allowed with TYPE=CLOSED-CAPTIONS".to_string(),
                     ));
                 }
-            }
-            Tag::ExtXProgramDateTime(date_time) if !is_date_time(date_time) => {
-                errors.push(ValidationError::InvalidProgramDateTime);
             }
             Tag::ExtXDateRange {
                 id,
@@ -772,7 +770,7 @@ fn parse_tag(line: &str) -> Result<Option<Tag>, SyntaxError> {
             return Err(invalid_value("EXT-X-ALLOW-CACHE", value))
         }
         ("EXT-X-PROGRAM-DATE-TIME", Some(value)) => {
-            Tag::ExtXProgramDateTime(non_empty(value, "EXT-X-PROGRAM-DATE-TIME")?)
+            Tag::ExtXProgramDateTime(parse_value(value, "EXT-X-PROGRAM-DATE-TIME")?)
         }
         ("EXT-X-BYTERANGE", Some(value)) => {
             Tag::ExtXByteRange(parse_value(value, "EXT-X-BYTERANGE")?)
@@ -820,14 +818,6 @@ fn invalid_value(tag: &'static str, value: &str) -> SyntaxError {
 
 fn parse_value<T: std::str::FromStr>(value: &str, tag: &'static str) -> Result<T, SyntaxError> {
     value.parse().map_err(|_| invalid_value(tag, value))
-}
-
-fn non_empty(value: &str, tag: &'static str) -> Result<String, SyntaxError> {
-    if value.is_empty() {
-        Err(invalid_value(tag, value))
-    } else {
-        Ok(value.to_string())
-    }
 }
 
 fn parse_key(attributes: &[Attribute], tag: &'static str) -> Result<Key, SyntaxError> {
@@ -1110,76 +1100,9 @@ fn parse_rendition_report(attributes: &[Attribute]) -> Result<Tag, SyntaxError> 
     })
 }
 
-/// Whether `day` exists in `month` of `year`; all three are already known to be numeric.
-fn day_in_month(year: &str, month: &str, day: &str) -> bool {
-    let (year, month, day): (u32, u32, u32) = match (year.parse(), month.parse(), day.parse()) {
-        (Ok(year), Ok(month), Ok(day)) => (year, month, day),
-        _ => return false,
-    };
-    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-    let days = match month {
-        2 if leap => 29,
-        2 => 28,
-        4 | 6 | 9 | 11 => 30,
-        _ => 31,
-    };
-    day <= days
-}
-
 /// Checks the ISO 8601 date-time form HLS uses, e.g. `2010-02-19T14:54:23.031+08:00`.
 fn is_date_time(value: &str) -> bool {
-    fn number_in(value: &str, digits: usize, min: u32, max: u32) -> bool {
-        value.len() == digits
-            && value.bytes().all(|byte| byte.is_ascii_digit())
-            && value
-                .parse()
-                .is_ok_and(|number: u32| (min..=max).contains(&number))
-    }
-
-    let Some((date, time)) = value.split_once('T') else {
-        return false;
-    };
-    let date_ok = matches!(
-        date.split('-').collect::<Vec<_>>().as_slice(),
-        [year, month, day] if number_in(year, 4, 0, 9999)
-            && number_in(month, 2, 1, 12)
-            && number_in(day, 2, 1, 31)
-            && day_in_month(year, month, day)
-    );
-
-    let (clock, zone) = time.split_at(time.find(['Z', '+', '-']).unwrap_or(time.len()));
-    let (clock, fraction) = match clock.split_once('.') {
-        Some((clock, fraction)) => (clock, Some(fraction)),
-        None => (clock, None),
-    };
-    let fraction_ok = fraction.is_none_or(|fraction| {
-        !fraction.is_empty() && fraction.bytes().all(|b| b.is_ascii_digit())
-    });
-    let clock_ok = match clock.split(':').collect::<Vec<_>>().as_slice() {
-        [hour, minute] => {
-            fraction.is_none() && number_in(hour, 2, 0, 23) && number_in(minute, 2, 0, 59)
-        }
-        [hour, minute, second] => {
-            number_in(hour, 2, 0, 23) && number_in(minute, 2, 0, 59) && number_in(second, 2, 0, 60)
-        }
-        _ => false,
-    };
-    let zone_ok = match zone {
-        "" | "Z" => true,
-        _ => {
-            let offset = zone[1..].replace(':', "");
-            if !offset.is_ascii() {
-                return false;
-            }
-            match offset.len() {
-                2 => number_in(&offset, 2, 0, 23),
-                4 => number_in(&offset[..2], 2, 0, 23) && number_in(&offset[2..], 2, 0, 59),
-                _ => false,
-            }
-        }
-    };
-
-    date_ok && fraction_ok && clock_ok && zone_ok
+    value.parse::<DateTime>().is_ok()
 }
 
 /// Writing has no escape mechanism, so a string holding a newline or a quote can
