@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::m3u8::datetime::DateTime;
     use crate::m3u8::error::{ParseError, SubstitutionError, SyntaxError};
     use crate::m3u8::playlist::builder::PlaylistBuilder;
     use crate::m3u8::playlist::Playlist;
@@ -455,8 +456,8 @@ second.ts
             })
         );
         assert_eq!(
-            segments[0].program_date_time.as_deref(),
-            Some("2024-01-01T00:00:00Z")
+            segments[0].program_date_time,
+            Some("2024-01-01T00:00:00Z".parse().unwrap())
         );
         assert!(segments[0].gap);
         assert_eq!(
@@ -757,7 +758,7 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
+                Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".parse().unwrap()),
                 Tag::ExtInf {
                     uri: "https://media.example.com/first.ts".to_string(),
                     duration: 5.005,
@@ -785,7 +786,7 @@ https://media.example.com/third.ts
                 Tag::ExtM3U,
                 Tag::ExtXVersion(7),
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".to_string()),
+                Tag::ExtXProgramDateTime("2020-01-01T00:00:00Z".parse().unwrap()),
                 Tag::ExtInf {
                     uri: "https://media.example.com/first.ts".to_string(),
                     duration: 5.005,
@@ -1067,22 +1068,6 @@ https://media.example.com/third.ts
             .build();
 
         assert_eq!(playlist, Err(vec![ValidationError::InvalidMapUri]));
-    }
-
-    #[test]
-    fn test_validate_playlist_invalid_program_date_time() {
-        let playlist = PlaylistBuilder::new()
-            .extm3u()
-            .version(3)
-            .target_duration(10)
-            .program_date_time("") // Invalid program date time
-            .extinf("https://media.example.com/first.ts", 5.005, None)
-            .extinf("https://media.example.com/second.ts", 5.005, None)
-            .extinf("https://media.example.com/third.ts", 3.003, None)
-            .end_list()
-            .build();
-
-        assert_eq!(playlist, Err(vec![ValidationError::InvalidProgramDateTime]));
     }
 
     #[test]
@@ -2070,16 +2055,15 @@ media.mp4
             tags: vec![
                 Tag::ExtM3U,
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtXProgramDateTime("2010-02-19T14:54:23.031+08:00".to_string()),
+                Tag::ExtXProgramDateTime("2010-02-19T14:54:23.031+08:00".parse().unwrap()),
                 date_range("2024-01-01T00:00:00Z", Some("2024-01-01T00:00:30.5Z")),
-                Tag::ExtXProgramDateTime("2024-12-31T23:59:60-0500".to_string()),
+                Tag::ExtXProgramDateTime("2024-12-31T23:59:60-0500".parse().unwrap()),
             ],
         };
         let invalid = Playlist {
             tags: vec![
                 Tag::ExtM3U,
                 Tag::ExtXTargetDuration(10),
-                Tag::ExtXProgramDateTime("yesterday".to_string()),
                 date_range("2024-13-01T00:00:00Z", Some("2024-01-01 00:00:00Z")),
             ],
         };
@@ -2088,7 +2072,6 @@ media.mp4
         assert_eq!(
             invalid.validate(),
             Err(vec![
-                ValidationError::InvalidProgramDateTime,
                 ValidationError::InvalidDateRangeStartDate,
                 ValidationError::InvalidDateRangeEndDate,
             ])
@@ -2286,32 +2269,141 @@ seg2.mp4
     }
 
     #[test]
-    fn test_validate_non_ascii_time_zone_does_not_panic() {
-        let playlist: Playlist =
-            "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00+a\u{20ac}\n"
-                .parse()
-                .unwrap();
-        let errors = playlist.validate().unwrap_err();
-        assert!(errors.contains(&ValidationError::InvalidProgramDateTime));
+    fn test_parse_rejects_invalid_program_date_time() {
+        for value in [
+            "",
+            "yesterday",
+            "2020-01-01T00:00:00+a\u{20ac}",
+            "2020-01-01T00:00:00Zjunk",
+            "2020-01-01T24:00:00Z",
+            "2020-01-01T00:00:00.Z",
+            "2020-01-01T00:00.5Z",
+            "2020-01-01 00:00:00Z",
+            "2021-02-31T00:00:00Z",
+            "2021-04-31T00:00:00Z",
+            "2023-02-29T00:00:00Z",
+        ] {
+            let result = format!("#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:{value}\n").parse::<Playlist>();
+            assert!(result.is_err(), "{value:?} should not parse");
+        }
+        let leap: Playlist = "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2024-02-29T00:00:00Z\n"
+            .parse()
+            .unwrap();
+        assert_eq!(leap.tags.len(), 2);
     }
 
     #[test]
-    fn test_validate_rejects_nonexistent_day() {
-        for date in ["2021-02-31", "2021-04-31", "2023-02-29"] {
-            let playlist: Playlist =
-                format!("#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:{date}T00:00:00Z\n")
-                    .parse()
-                    .unwrap();
-            assert!(playlist
-                .validate()
-                .unwrap_err()
-                .contains(&ValidationError::InvalidProgramDateTime));
+    fn test_date_time_fields_and_display() {
+        let date_time: DateTime = "2010-02-19T14:54:23.031+08:00".parse().unwrap();
+        assert_eq!(
+            (
+                date_time.year(),
+                date_time.month(),
+                date_time.day(),
+                date_time.hour(),
+                date_time.minute(),
+                date_time.second(),
+                date_time.nanosecond(),
+                date_time.offset_minutes()
+            ),
+            (2010, 2, 19, 14, 54, 23, 31_000_000, Some(480))
+        );
+        assert_eq!(date_time.to_string(), "2010-02-19T14:54:23.031+08:00");
+
+        for (input, output) in [
+            ("2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z"),
+            ("2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z"),
+            ("2024-01-01T00:00:00+00:00", "2024-01-01T00:00:00Z"),
+            ("2024-01-01T10:30Z", "2024-01-01T10:30:00Z"),
+            ("2024-12-31T23:59:60-0500", "2024-12-31T23:59:60-05:00"),
+            ("2024-01-01T00:00:00+05:30", "2024-01-01T00:00:00+05:30"),
+            (
+                "2024-01-01T00:00:00.1234567Z",
+                "2024-01-01T00:00:00.1234567Z",
+            ),
+            ("2024-01-01T00:00:00.5", "2024-01-01T00:00:00.5"),
+            (
+                "2024-01-01T00:00:00.123456789123Z",
+                "2024-01-01T00:00:00.123456789Z",
+            ),
+            ("2024-01-01T00:00:00+09", "2024-01-01T00:00:00+09:00"),
+        ] {
+            let parsed: DateTime = input.parse().unwrap();
+            assert_eq!(parsed.to_string(), output, "{input}");
+            assert_eq!(parsed.to_string().parse::<DateTime>().unwrap(), parsed);
         }
-        let leap: Playlist =
-            "#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXT-X-PROGRAM-DATE-TIME:2024-02-29T00:00:00Z\n"
-                .parse()
-                .unwrap();
-        assert_eq!(leap.validate(), Ok(()));
+        assert_eq!(
+            "2024-01-01T00:00:00"
+                .parse::<DateTime>()
+                .unwrap()
+                .offset_minutes(),
+            None
+        );
+    }
+
+    #[test]
+    fn test_date_time_unix_timestamp() {
+        let timestamp = |text: &str| text.parse::<DateTime>().unwrap().unix_timestamp();
+        assert_eq!(timestamp("1970-01-01T00:00:00Z"), 0);
+        assert_eq!(timestamp("2000-03-01T00:00:00Z"), 951_868_800);
+        assert_eq!(timestamp("2024-02-29T12:00:00Z"), 1_709_208_000);
+        assert_eq!(timestamp("2024-02-29T12:00:00+02:00"), 1_709_200_800);
+        assert_eq!(timestamp("2024-02-29T12:00:00"), 1_709_208_000);
+        assert_eq!(timestamp("1969-12-31T23:59:59Z"), -1);
+        assert_eq!(timestamp("0000-01-01T00:00:00Z"), -62_167_219_200);
+
+        for seconds in [
+            0,
+            -1,
+            951_868_800,
+            1_709_208_000,
+            -62_167_219_200,
+            253_402_300_799,
+        ] {
+            let date_time = DateTime::from_unix_timestamp(seconds, 500_000_000).unwrap();
+            assert_eq!(date_time.unix_timestamp(), seconds);
+            assert_eq!(date_time.nanosecond(), 500_000_000);
+            assert_eq!(date_time.offset_minutes(), Some(0));
+        }
+        assert_eq!(
+            DateTime::from_unix_timestamp(1_709_208_000, 0)
+                .unwrap()
+                .to_string(),
+            "2024-02-29T12:00:00Z"
+        );
+        assert_eq!(DateTime::from_unix_timestamp(253_402_300_800, 0), None);
+        assert_eq!(DateTime::from_unix_timestamp(-62_167_219_201, 0), None);
+        assert_eq!(DateTime::from_unix_timestamp(0, 1_000_000_000), None);
+    }
+
+    #[test]
+    fn test_date_time_new_validates_fields() {
+        assert!(DateTime::new(2024, 2, 29, 23, 59, 60, 999_999_999, Some(-1439)).is_some());
+        assert!(DateTime::new(2023, 2, 29, 0, 0, 0, 0, None).is_none());
+        assert!(DateTime::new(2024, 13, 1, 0, 0, 0, 0, None).is_none());
+        assert!(DateTime::new(2024, 1, 0, 0, 0, 0, 0, None).is_none());
+        assert!(DateTime::new(2024, 1, 1, 24, 0, 0, 0, None).is_none());
+        assert!(DateTime::new(2024, 1, 1, 0, 60, 0, 0, None).is_none());
+        assert!(DateTime::new(2024, 1, 1, 0, 0, 61, 0, None).is_none());
+        assert!(DateTime::new(2024, 1, 1, 0, 0, 0, 0, Some(1440)).is_none());
+        assert!(DateTime::new(10_000, 1, 1, 0, 0, 0, 0, None).is_none());
+    }
+
+    #[test]
+    fn test_builder_program_date_time_round_trips() {
+        let start = DateTime::from_unix_timestamp(1_709_208_000, 250_000_000).unwrap();
+        let playlist = PlaylistBuilder::new()
+            .extm3u()
+            .target_duration(10)
+            .program_date_time(start)
+            .extinf("a.ts", 9.0, None)
+            .end_list()
+            .build()
+            .unwrap();
+        let text = playlist.to_string();
+        assert!(text.contains("#EXT-X-PROGRAM-DATE-TIME:2024-02-29T12:00:00.250Z\n"));
+        let reparsed: Playlist = text.parse().unwrap();
+        assert_eq!(reparsed.media_segments()[0].program_date_time, Some(start));
     }
 
     #[test]
