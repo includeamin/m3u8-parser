@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.0] - 2026-11-22
+
+### 🚀 Features
+
+- [**breaking**] Add a typed `Codecs` for the `CODECS` attribute: the `codecs` field of `EXT-X-STREAM-INF` and `EXT-X-I-FRAME-STREAM-INF`, `Variant::codecs` and the `PlaylistBuilder::stream_inf` and `iframe_stream_inf` parameters now use it instead of a string
+- `Codecs` lists the codec identifiers with `iter`, `len`, `is_empty` and `contains_family`
+- Add `ValidationError::InvalidCodecs` for empty `CODECS` entries
+
 ## [0.15.0] - 2026-11-22
 
 ### 🚀 Features
