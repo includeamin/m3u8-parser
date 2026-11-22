@@ -37,11 +37,13 @@
 //! - `media_segments(&self) -> Vec<MediaSegment>`: Returns the media segments with their effective state.
 //! - `total_duration`, `variants`, `variants_by_bandwidth`, `renditions` and `renditions_in_group`: Read-only views over durations, variant streams and renditions.
 //! - `apply_delta_update(&self, delta: &Playlist) -> Result<Playlist, DeltaUpdateError>`: Merges a Playlist Delta Update (`EXT-X-SKIP`) into the previously loaded playlist.
+//! - `pending_parts`, `pending_segment_sequence` and `latest_part_position`: Partial Segments of the segment in progress and the newest part's position.
 //! - `validate(&self) -> Result<(), Vec<ValidationError>>`: Validates the playlist according to RFC 8216, returning any validation errors.
 
 pub mod builder;
 mod delta;
 mod helpers;
+mod parts;
 mod resolve;
 mod variables;
 
@@ -69,6 +71,7 @@ pub struct Playlist {
 }
 
 pub use helpers::{Rendition, Variant};
+pub use parts::{Part, PartPosition};
 
 /// A media segment and the state established by preceding Media Playlist tags.
 #[derive(Debug, PartialEq, Clone)]
@@ -86,6 +89,8 @@ pub struct MediaSegment {
     pub byterange: Option<ByteRange>,
     pub program_date_time: Option<String>,
     pub gap: bool,
+    /// The Partial Segments that precede this segment's `EXTINF`.
+    pub parts: Vec<Part>,
 }
 
 impl std::fmt::Display for Playlist {
@@ -192,10 +197,16 @@ impl Playlist {
         let mut byterange = None;
         let mut program_date_time = None;
         let mut gap = false;
+        let mut parts = Vec::new();
 
         for tag in &self.tags {
             match tag {
                 Tag::ExtXMediaSequence(first) => sequence = *first,
+                // A delta update's skipped segments are not listed but still count.
+                Tag::ExtXSkip {
+                    skipped_segments, ..
+                } => sequence += u64::from(*skipped_segments),
+                Tag::ExtXPart { .. } => parts.extend(Part::from_tag(tag)),
                 Tag::ExtXDiscontinuity => discontinuity = true,
                 Tag::ExtXKey(value) => {
                     key = (value.method != KeyMethod::None).then(|| value.clone());
@@ -220,6 +231,7 @@ impl Playlist {
                         byterange: byterange.take(),
                         program_date_time: program_date_time.take(),
                         gap: std::mem::take(&mut gap),
+                        parts: std::mem::take(&mut parts),
                     });
                     sequence += 1;
                 }

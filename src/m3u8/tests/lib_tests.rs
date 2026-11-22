@@ -2909,6 +2909,90 @@ lo2.m3u8\n"
     }
 
     #[test]
+    fn test_partial_segments() {
+        use crate::m3u8::playlist::PartPosition;
+        let header = "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n\
+#EXT-X-PART-INF:PART-TARGET=1\n#EXT-X-MEDIA-SEQUENCE:20\n";
+        let playlist: Playlist = format!(
+            "{header}#EXT-X-PART:DURATION=1,URI=\"s20.0.m4s\",INDEPENDENT=YES\n\
+#EXT-X-PART:DURATION=1,URI=\"s20.1.m4s\",BYTERANGE=\"100@0\"\n#EXTINF:2,\ns20.m4s\n\
+#EXTINF:4,\ns21.m4s\n\
+#EXT-X-PART:DURATION=1,URI=\"s22.0.m4s\",INDEPENDENT=YES\n\
+#EXT-X-PART:DURATION=0.5,URI=\"s22.1.m4s\",GAP=YES\n\
+#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"s22.2.m4s\"\n"
+        )
+        .parse()
+        .unwrap();
+
+        let segments = playlist.media_segments();
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].parts.len(), 2);
+        assert_eq!(segments[0].parts[0].uri, "s20.0.m4s");
+        assert!(segments[0].parts[0].independent && !segments[0].parts[1].independent);
+        assert_eq!(
+            segments[0].parts[1].byterange,
+            Some(ByteRange {
+                length: 100,
+                offset: Some(0)
+            })
+        );
+        assert!(segments[1].parts.is_empty());
+
+        let pending = playlist.pending_parts();
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[1].duration, 0.5);
+        assert!(pending[1].gap && !pending[0].gap);
+        assert_eq!(playlist.pending_segment_sequence(), 22);
+        assert_eq!(
+            playlist.latest_part_position(),
+            Some(PartPosition {
+                sequence: 22,
+                part: 1
+            })
+        );
+
+        // Without pending parts the newest part is the last completed segment's.
+        let completed: Playlist = format!(
+            "{header}#EXT-X-PART:DURATION=1,URI=\"a\"\n#EXT-X-PART:DURATION=1,URI=\"b\"\n\
+#EXT-X-PART:DURATION=1,URI=\"c\"\n#EXTINF:3,\ns20.m4s\n"
+        )
+        .parse()
+        .unwrap();
+        assert!(completed.pending_parts().is_empty());
+        assert_eq!(
+            completed.latest_part_position(),
+            Some(PartPosition {
+                sequence: 20,
+                part: 2
+            })
+        );
+
+        let plain: Playlist = format!("{header}#EXTINF:4,\ns20.m4s\n").parse().unwrap();
+        assert_eq!(plain.latest_part_position(), None);
+        assert_eq!(plain.pending_segment_sequence(), 21);
+
+        // A delta update's skipped segments still advance the sequence.
+        let delta: Playlist = format!(
+            "{header}#EXT-X-SKIP:SKIPPED-SEGMENTS=3\n#EXTINF:4,\ns23.m4s\n\
+#EXT-X-PART:DURATION=1,URI=\"p\"\n"
+        )
+        .parse()
+        .unwrap();
+        assert_eq!(delta.media_segments()[0].sequence, 23);
+        assert_eq!(
+            delta.latest_part_position(),
+            Some(PartPosition {
+                sequence: 24,
+                part: 0
+            })
+        );
+        let only_skip: Playlist = format!("{header}#EXT-X-SKIP:SKIPPED-SEGMENTS=3\n")
+            .parse()
+            .unwrap();
+        assert_eq!(only_skip.pending_segment_sequence(), 23);
+    }
+
+    #[test]
     fn test_validate_media_group_rules() {
         let media =
             |attributes: &str| format!("#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"g\",{attributes}\n");
