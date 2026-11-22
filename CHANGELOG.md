@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.0] - 2026-11-22
+
+### 🚀 Features
+
+- [**breaking**] Add a typed `DateTime` for `EXT-X-PROGRAM-DATE-TIME`: `Tag::ExtXProgramDateTime`, `MediaSegment::program_date_time` and `PlaylistBuilder::program_date_time` now use it instead of a string
+- `DateTime` exposes its fields, converts to and from Unix timestamps with `unix_timestamp` and `from_unix_timestamp`, and keeps the fraction precision when written
+
+### 🔄 Changes
+
+- [**breaking**] An invalid `EXT-X-PROGRAM-DATE-TIME` now fails at parse time with a `SyntaxError`, and `ValidationError::InvalidProgramDateTime` is removed
+
 ## [0.14.0] - 2026-11-22
 
 ### 🚀 Features
