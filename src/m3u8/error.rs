@@ -59,6 +59,38 @@ impl From<io::Error> for ParseError {
     }
 }
 
+/// An error encountered while applying a Playlist Delta Update.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeltaUpdateError {
+    /// The delta update has more than one EXT-X-SKIP tag.
+    MultipleSkipTags,
+    /// The previous playlist is itself a delta update, so it does not hold the
+    /// full list of segments.
+    PreviousIsDeltaUpdate,
+    /// The previous playlist does not contain a segment that the delta update
+    /// skipped. Holds the Media Sequence Number of the missing segment.
+    MissingSegment(u64),
+}
+
+impl fmt::Display for DeltaUpdateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeltaUpdateError::MultipleSkipTags => {
+                write!(f, "delta update has more than one EXT-X-SKIP tag")
+            }
+            DeltaUpdateError::PreviousIsDeltaUpdate => {
+                write!(f, "the previous playlist is itself a delta update")
+            }
+            DeltaUpdateError::MissingSegment(sequence) => {
+                write!(f, "the previous playlist lacks skipped segment {sequence}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for DeltaUpdateError {}
+
 /// An error encountered while resolving URIs against a base URI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]

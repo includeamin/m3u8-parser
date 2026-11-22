@@ -20,6 +20,8 @@ by draft-pantos-hls-rfc8216bis.
   with `Playlist::substitute_variables`
 - Resolve relative URIs against a base URL with `Playlist::resolve_uris` or
   `uri::resolve_uri` (RFC 3986 section 5, no extra dependencies)
+- Merge Playlist Delta Updates (`EXT-X-SKIP`) into the previous playlist with
+  `Playlist::apply_delta_update`
 - Convenience views: `total_duration`, `variants`, `variants_by_bandwidth`,
   `renditions` and `renditions_in_group`
 - Typed attribute values such as `ByteRange`, `Key`, `Map`, `KeyMethod`,
