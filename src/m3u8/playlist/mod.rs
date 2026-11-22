@@ -53,7 +53,7 @@ use crate::m3u8::parser::{
     attribute, extra_attributes, optional_boolean, optional_parsed, optional_string,
     parse_attribute_list, required_parsed, required_string, Attribute,
 };
-use crate::m3u8::tags::{ByteRange, Key, KeyMethod, Map, Tag};
+use crate::m3u8::tags::{ByteRange, Codecs, Key, KeyMethod, Map, Tag};
 use crate::m3u8::validation::ValidationError;
 use std::collections::HashSet;
 use std::fs::File;
@@ -281,6 +281,22 @@ impl Playlist {
             {
                 errors.push(ValidationError::InvalidContentSteering(format!(
                     "PATHWAY-ID on {} must be non-empty and use only A-Z, a-z, 0-9, '.', '-' and '_'",
+                    tag_name(tag)
+                )));
+            }
+        }
+        if let Tag::ExtXStreamInf {
+            codecs: Some(codecs),
+            ..
+        }
+        | Tag::ExtXIFrameStreamInf {
+            codecs: Some(codecs),
+            ..
+        } = tag
+        {
+            if codecs.iter().any(str::is_empty) {
+                errors.push(ValidationError::InvalidCodecs(format!(
+                    "CODECS on {} has an empty entry",
                     tag_name(tag)
                 )));
             }
@@ -937,7 +953,7 @@ fn parse_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError> {
     Ok(Tag::ExtXStreamInf {
         bandwidth: required_parsed(attributes, "BANDWIDTH", TAG)?,
         average_bandwidth: optional_parsed(attributes, "AVERAGE-BANDWIDTH", TAG)?,
-        codecs: optional_string(attributes, "CODECS"),
+        codecs: optional_string(attributes, "CODECS").map(|codecs| Codecs::from(codecs.as_str())),
         resolution: optional_parsed(attributes, "RESOLUTION", TAG)?,
         frame_rate: optional_parsed(attributes, "FRAME-RATE", TAG)?,
         audio: optional_string(attributes, "AUDIO"),
@@ -968,7 +984,7 @@ fn parse_i_frame_stream_inf(attributes: &[Attribute]) -> Result<Tag, SyntaxError
     Ok(Tag::ExtXIFrameStreamInf {
         bandwidth: required_parsed(attributes, "BANDWIDTH", TAG)?,
         average_bandwidth: optional_parsed(attributes, "AVERAGE-BANDWIDTH", TAG)?,
-        codecs: optional_string(attributes, "CODECS"),
+        codecs: optional_string(attributes, "CODECS").map(|codecs| Codecs::from(codecs.as_str())),
         resolution: optional_parsed(attributes, "RESOLUTION", TAG)?,
         frame_rate: optional_parsed(attributes, "FRAME-RATE", TAG)?,
         uri: required_string(attributes, "URI", TAG)?,

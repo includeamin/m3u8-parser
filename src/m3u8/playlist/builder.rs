@@ -1,6 +1,6 @@
 use crate::m3u8::datetime::DateTime;
 use crate::m3u8::playlist::Playlist;
-use crate::m3u8::tags::{ByteRange, Key, KeyMethod, Map, PlaylistType, Resolution, Tag};
+use crate::m3u8::tags::{ByteRange, Codecs, Key, KeyMethod, Map, PlaylistType, Resolution, Tag};
 use crate::m3u8::validation::ValidationError;
 
 /// A builder for creating a `Playlist` with a chained interface.
@@ -248,7 +248,7 @@ impl PlaylistBuilder {
         self,
         bandwidth: u32,
         average_bandwidth: Option<u32>,
-        codecs: Option<&str>,
+        codecs: Option<Codecs>,
         resolution: Option<Resolution>,
         frame_rate: Option<f64>,
         audio: Option<&str>,
@@ -259,7 +259,7 @@ impl PlaylistBuilder {
         self.tag(Tag::ExtXStreamInf {
             bandwidth,
             average_bandwidth,
-            codecs: codecs.map(|s| s.to_string()),
+            codecs,
             resolution,
             frame_rate,
             audio: audio.map(|s| s.to_string()),
@@ -277,7 +277,7 @@ impl PlaylistBuilder {
         self,
         bandwidth: u32,
         average_bandwidth: Option<u32>,
-        codecs: Option<&str>,
+        codecs: Option<Codecs>,
         resolution: Option<Resolution>,
         frame_rate: Option<f64>,
         uri: &str,
@@ -285,7 +285,7 @@ impl PlaylistBuilder {
         self.tag(Tag::ExtXIFrameStreamInf {
             bandwidth,
             average_bandwidth,
-            codecs: codecs.map(|s| s.to_string()),
+            codecs,
             resolution,
             frame_rate,
             uri: uri.to_string(),

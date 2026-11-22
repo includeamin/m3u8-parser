@@ -67,7 +67,7 @@ pub enum Tag {
     ExtXStreamInf {
         bandwidth: u32,
         average_bandwidth: Option<u32>,
-        codecs: Option<String>,
+        codecs: Option<Codecs>,
         resolution: Option<Resolution>,
         frame_rate: Option<f64>,
         audio: Option<String>,
@@ -83,7 +83,7 @@ pub enum Tag {
     ExtXIFrameStreamInf {
         bandwidth: u32,
         average_bandwidth: Option<u32>,
-        codecs: Option<String>,
+        codecs: Option<Codecs>,
         resolution: Option<Resolution>,
         frame_rate: Option<f64>,
         uri: String,
@@ -213,6 +213,61 @@ impl std::str::FromStr for Resolution {
             width: decimal(width)?,
             height: decimal(height)?,
         })
+    }
+}
+
+/// The codecs of a stream, from the CODECS attribute: a comma-separated list of
+/// RFC 6381 identifiers such as `avc1.640028,mp4a.40.2`.
+///
+/// Parsing splits on commas and trims whitespace around each entry; writing
+/// joins them with a bare comma. Empty entries are kept so the text round-trips,
+/// and validation reports them.
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Default)]
+pub struct Codecs(Vec<String>);
+
+impl Codecs {
+    /// The codec identifiers in playlist order.
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(String::as_str)
+    }
+
+    /// The number of codec identifiers.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Whether there are no codec identifiers.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Whether some codec's family matches `family`, ignoring ASCII case. The
+    /// family is the part before the first `.`, such as `avc1` or `mp4a`.
+    pub fn contains_family(&self, family: &str) -> bool {
+        self.iter().any(|codec| {
+            codec
+                .split('.')
+                .next()
+                .is_some_and(|own| own.eq_ignore_ascii_case(family))
+        })
+    }
+}
+
+impl<S: Into<String>> FromIterator<S> for Codecs {
+    fn from_iter<I: IntoIterator<Item = S>>(codecs: I) -> Self {
+        Codecs(codecs.into_iter().map(Into::into).collect())
+    }
+}
+
+impl From<&str> for Codecs {
+    fn from(value: &str) -> Self {
+        value.split(',').map(str::trim).collect()
+    }
+}
+
+impl std::fmt::Display for Codecs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0.join(","))
     }
 }
 

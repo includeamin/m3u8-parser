@@ -27,7 +27,7 @@ by draft-pantos-hls-rfc8216bis.
 - Convenience views: `total_duration`, `variants`, `variants_by_bandwidth`,
   `renditions` and `renditions_in_group`
 - Typed attribute values such as `ByteRange`, `Key`, `Map`, `KeyMethod`,
-  `PlaylistType`, `Resolution`, and numeric `TIME-OFFSET`, with `f64` durations
+  `PlaylistType`, `Resolution`, `Codecs`, and numeric `TIME-OFFSET`, with `f64` durations
 - Typed `EXT-X-PROGRAM-DATE-TIME`: `DateTime` parses ISO 8601 date-times into
   fields, converts to and from Unix timestamps, and keeps the text's precision
   when written back

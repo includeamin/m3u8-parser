@@ -1,7 +1,7 @@
 //! Read-only views over a playlist: total duration, variants and renditions.
 
 use super::Playlist;
-use crate::m3u8::tags::{Resolution, Tag};
+use crate::m3u8::tags::{Codecs, Resolution, Tag};
 
 /// A variant stream of a Multivariant Playlist: an EXT-X-STREAM-INF tag and the
 /// URI line that follows it.
@@ -10,7 +10,7 @@ pub struct Variant {
     pub uri: String,
     pub bandwidth: u32,
     pub average_bandwidth: Option<u32>,
-    pub codecs: Option<String>,
+    pub codecs: Option<Codecs>,
     pub resolution: Option<Resolution>,
     pub frame_rate: Option<f64>,
     /// The `AUDIO` rendition group.
