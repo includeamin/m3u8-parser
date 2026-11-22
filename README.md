@@ -88,6 +88,10 @@ m3u8-parser = "0.12.0"
 
 ## Usage
 
+Runnable examples live in [`examples/`](examples): `media_playlist`,
+`master_playlist`, `build_playlist` and `resolve_uris`. Run one with
+`cargo run --example media_playlist`.
+
 ### Parsing a Playlist
 
 ```rust
