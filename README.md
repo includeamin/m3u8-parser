@@ -22,6 +22,10 @@ by draft-pantos-hls-rfc8216bis.
   `uri::resolve_uri` (RFC 3986 section 5, no extra dependencies)
 - Merge Playlist Delta Updates (`EXT-X-SKIP`) into the previous playlist with
   `Playlist::apply_delta_update`
+- Blocking Playlist Reload and delta-update requests: `ReloadRequest` builds and
+  parses the `_HLS_msn`, `_HLS_part` and `_HLS_skip` query parameters, and
+  `Playlist::next_reload_request`, `skip_request`, `satisfies`, `can_block_reload`
+  and `can_skip_until` say what a playlist allows and what to request next
 - Low-latency partial segments: `MediaSegment::parts`, `Playlist::pending_parts`
   and `Playlist::latest_part_position`
 - Convenience views: `total_duration`, `variants`, `variants_by_bandwidth`,

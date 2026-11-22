@@ -110,6 +110,30 @@ impl fmt::Display for UriError {
 
 impl std::error::Error for UriError {}
 
+/// An error in the `_HLS_*` directives of a playlist reload request.
+#[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ReloadRequestError {
+    /// A directive has a value it cannot hold: `_HLS_msn` and `_HLS_part` take
+    /// a decimal integer, and `_HLS_skip` takes `YES` or `v2`.
+    InvalidValue { parameter: String, value: String },
+    /// `_HLS_part` was given without `_HLS_msn`.
+    PartWithoutMsn,
+}
+
+impl fmt::Display for ReloadRequestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReloadRequestError::InvalidValue { parameter, value } => {
+                write!(f, "invalid value for {parameter}: {value:?}")
+            }
+            ReloadRequestError::PartWithoutMsn => write!(f, "_HLS_part requires _HLS_msn"),
+        }
+    }
+}
+
+impl std::error::Error for ReloadRequestError {}
+
 /// An error encountered while substituting EXT-X-DEFINE variables.
 #[derive(Debug)]
 #[non_exhaustive]
