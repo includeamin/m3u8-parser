@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.0] - 2026-11-23
+
+### 🚀 Features
+
+- Add `ReloadRequest` and `SkipRequest` to build and parse the `_HLS_msn`, `_HLS_part` and `_HLS_skip` query parameters of Blocking Playlist Reload and delta update requests, with `ReloadRequestError` for invalid directives
+- Add `Playlist::can_block_reload`, `can_skip_until`, `can_skip_dateranges`, `supports_skip` and `skip_request` for the capabilities the server advertises
+- Add `Playlist::next_reload_request` for the request that blocks on the next part or segment, and `Playlist::satisfies` to check whether a playlist answers a request
+- Validation requires `CAN-SKIP-UNTIL` to be at least six times `EXT-X-TARGETDURATION`
+
 ## [0.17.0] - 2026-11-22
 
 ### 🚀 Features
