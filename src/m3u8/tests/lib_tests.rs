@@ -3232,6 +3232,324 @@ a.m3u8\n"
     }
 
     #[test]
+    fn test_to_delta_update_skips_segments_before_the_boundary() {
+        use crate::m3u8::playlist::SkipRequest;
+
+        let segments = |names: &[&str]| -> String {
+            names
+                .iter()
+                .map(|name| format!("#EXTINF:4,\n{name}.ts\n"))
+                .collect()
+        };
+        let head = "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24\n#EXT-X-MEDIA-SEQUENCE:7\n";
+        let full: Playlist = format!(
+            "{head}{}",
+            segments(&["a", "b", "c", "d", "e", "f", "g", "h"])
+        )
+        .parse()
+        .unwrap();
+
+        // 28s follow `a` and 24s follow `b`, but only 20s follow `c`.
+        let delta = full.to_delta_update(SkipRequest::Segments, &[]).unwrap();
+        assert_eq!(
+            delta.to_string(),
+            format!(
+                "{head}#EXT-X-SKIP:SKIPPED-SEGMENTS=2\n{}",
+                segments(&["c", "d", "e", "f", "g", "h"])
+            )
+        );
+        assert_eq!(delta.validate(), Ok(()));
+        assert_eq!(
+            full.apply_delta_update(&delta).unwrap().to_string(),
+            full.to_string()
+        );
+
+        // Fewer segments than the boundary: nothing to skip.
+        let short: Playlist = format!("{head}{}", segments(&["a", "b", "c", "d", "e", "f"]))
+            .parse()
+            .unwrap();
+        assert_eq!(short.to_delta_update(SkipRequest::Segments, &[]), None);
+    }
+
+    #[test]
+    fn test_to_delta_update_counts_pending_parts() {
+        use crate::m3u8::playlist::SkipRequest;
+
+        let data =
+            "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n#EXT-X-PART-INF:PART-TARGET=1\n\
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24,CAN-BLOCK-RELOAD=YES\n#EXT-X-MEDIA-SEQUENCE:0\n\
+#EXTINF:4,\na.ts\n#EXTINF:4,\nb.ts\n#EXTINF:4,\nc.ts\n#EXTINF:4,\nd.ts\n#EXTINF:4,\ne.ts\n\
+#EXT-X-PART:DURATION=1,URI=\"f1.ts\"\n#EXT-X-PART:DURATION=1,URI=\"f2.ts\"\n";
+        // 16s of segments follow `a`, plus 2s of parts: only 18s, so no skip.
+        let full: Playlist = data.parse().unwrap();
+        assert_eq!(full.to_delta_update(SkipRequest::Segments, &[]), None);
+
+        // One more segment makes 22s follow `a`: still short.
+        let more = data.replace(
+            "#EXT-X-PART:DURATION=1,URI=\"f1.ts\"",
+            "#EXTINF:4,\nf.ts\n#EXT-X-PART:DURATION=1,URI=\"g1.ts\"",
+        );
+        let more: Playlist = more.parse().unwrap();
+        assert_eq!(more.to_delta_update(SkipRequest::Segments, &[]), None);
+
+        // Two more segments: 26s follow `a`, 22s follow `b`.
+        let enough = data.replace(
+            "#EXT-X-PART:DURATION=1,URI=\"f1.ts\"",
+            "#EXTINF:4,\nf.ts\n#EXTINF:4,\ng.ts\n#EXT-X-PART:DURATION=1,URI=\"h1.ts\"",
+        );
+        let enough: Playlist = enough.parse().unwrap();
+        let delta = enough.to_delta_update(SkipRequest::Segments, &[]).unwrap();
+        assert!(delta
+            .to_string()
+            .contains("#EXT-X-SKIP:SKIPPED-SEGMENTS=1\n"));
+        // The part of the segment in progress is kept.
+        assert_eq!(delta.pending_parts().len(), 2);
+        assert_eq!(
+            enough.apply_delta_update(&delta).unwrap().to_string(),
+            enough.to_string()
+        );
+    }
+
+    #[test]
+    fn test_to_delta_update_drops_segment_tags_of_skipped_segments() {
+        use crate::m3u8::playlist::SkipRequest;
+
+        let full: Playlist = "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n\
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-DISCONTINUITY-SEQUENCE:3\n\
+#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-KEY:METHOD=AES-128,URI=\"k1\"\n\
+#EXT-X-PROGRAM-DATE-TIME:2024-01-01T00:00:00Z\n#EXTINF:4,\na.m4s\n\
+#EXT-X-DISCONTINUITY\n#EXT-X-KEY:METHOD=AES-128,URI=\"k2\"\n#EXTINF:4,\nb.m4s\n\
+#EXT-X-BYTERANGE:100@0\n#EXT-X-GAP\n#EXTINF:4,\nc.m4s\n\
+#EXTINF:4,\nd.m4s\n#EXTINF:4,\ne.m4s\n#EXT-X-KEY:METHOD=AES-128,URI=\"k3\"\n#EXTINF:4,\nf.m4s\n\
+#EXTINF:4,\ng.m4s\n#EXTINF:4,\nh.m4s\n#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"i1.m4s\"\n"
+            .parse()
+            .unwrap();
+        let delta = full.to_delta_update(SkipRequest::Segments, &[]).unwrap();
+        let text = delta.to_string();
+        // `a` and `b` are skipped (28s and 24s follow), `c` is not.
+        assert!(text.contains("#EXT-X-SKIP:SKIPPED-SEGMENTS=2\n"));
+        for gone in ["init.mp4", "k1", "k2", "2024-01-01", "a.m4s", "b.m4s"] {
+            assert!(!text.contains(gone), "{gone} should be skipped");
+        }
+        for kept in [
+            "DISCONTINUITY-SEQUENCE:3",
+            "BYTERANGE:100@0",
+            "EXT-X-GAP",
+            "k3",
+            "PRELOAD-HINT",
+            "c.m4s",
+        ] {
+            assert!(text.contains(kept), "{kept} should be kept");
+        }
+        assert_eq!(delta.validate(), Ok(()));
+        assert_eq!(
+            full.apply_delta_update(&delta).unwrap().to_string(),
+            full.to_string()
+        );
+    }
+
+    #[test]
+    fn test_to_delta_update_against_an_older_playlist() {
+        use crate::m3u8::playlist::SkipRequest;
+
+        let build = |first: u64, key: &str| -> Playlist {
+            let mut data = format!(
+                "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24\n#EXT-X-MEDIA-SEQUENCE:{first}\n{key}"
+            );
+            for index in first..first + 8 {
+                data.push_str(&format!("#EXTINF:4,\ns{index}.ts\n"));
+            }
+            data.parse().unwrap()
+        };
+        let key = "#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n";
+        // The client loaded segments 7 to 14; the server has moved on to 8 to 15.
+        let previous = build(7, key);
+        let current = build(8, key);
+        let delta = current.to_delta_update(SkipRequest::Segments, &[]).unwrap();
+        assert_eq!(
+            previous.apply_delta_update(&delta).unwrap().to_string(),
+            current.to_string()
+        );
+    }
+
+    #[test]
+    fn test_to_delta_update_date_ranges() {
+        use crate::m3u8::playlist::SkipRequest;
+
+        let mut data = String::from(
+            "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24,CAN-SKIP-DATERANGES=YES\n#EXT-X-MEDIA-SEQUENCE:0\n\
+#EXT-X-DATERANGE:ID=\"old\",START-DATE=\"2024-01-01T00:00:00Z\"\n",
+        );
+        for name in ["a", "b", "c", "d", "e", "f", "g", "h"] {
+            data.push_str(&format!("#EXTINF:4,\n{name}.ts\n"));
+        }
+        data.push_str("#EXT-X-DATERANGE:ID=\"new\",START-DATE=\"2024-01-01T00:01:00Z\"\n");
+        let full: Playlist = data.parse().unwrap();
+
+        // _HLS_skip=YES only skips segments, so their date ranges are restated.
+        let yes = full.to_delta_update(SkipRequest::Segments, &[]).unwrap();
+        let text = yes.to_string();
+        assert!(text.contains("#EXT-X-SKIP:SKIPPED-SEGMENTS=2\n#EXT-X-DATERANGE:ID=\"old\""));
+        assert!(text.contains("ID=\"new\""));
+        let rebuilt = full.apply_delta_update(&yes).unwrap();
+        assert_eq!(rebuilt.to_string().matches("EXT-X-DATERANGE").count(), 2);
+        assert_eq!(rebuilt.media_segments().len(), 8);
+
+        // _HLS_skip=v2 also drops them and reports what the server removed.
+        let v2 = full
+            .to_delta_update(SkipRequest::SegmentsAndDateRanges, &["gone-1", "gone-2"])
+            .unwrap();
+        let text = v2.to_string();
+        assert!(!text.contains("ID=\"old\""));
+        assert!(text.contains("ID=\"new\""));
+        assert!(text.contains("#EXT-X-VERSION:10\n"));
+        assert!(text.contains(
+            "#EXT-X-SKIP:SKIPPED-SEGMENTS=2,RECENTLY-REMOVED-DATERANGES=\"gone-1\tgone-2\"\n"
+        ));
+        assert_eq!(v2.validate(), Ok(()));
+        assert!(matches!(
+            v2.tags.iter().find(|tag| matches!(tag, Tag::ExtXSkip { .. })),
+            Some(Tag::ExtXSkip { recently_removed_dateranges: Some(ids), .. }) if ids == "gone-1\tgone-2"
+        ));
+        // A client holding the previous playlist gets the old range back.
+        assert_eq!(
+            full.apply_delta_update(&v2)
+                .unwrap()
+                .to_string()
+                .matches("ID=\"old\"")
+                .count(),
+            1
+        );
+        // And not one the server says it removed.
+        let applied = full
+            .apply_delta_update(
+                &full
+                    .to_delta_update(SkipRequest::SegmentsAndDateRanges, &["old"])
+                    .unwrap(),
+            )
+            .unwrap();
+        assert!(!applied.to_string().contains("ID=\"old\""));
+
+        // Without a removed list the version only needs to be 9.
+        let plain = full
+            .to_delta_update(SkipRequest::SegmentsAndDateRanges, &[])
+            .unwrap();
+        assert!(plain.to_string().contains("#EXT-X-VERSION:9\n"));
+        assert!(plain
+            .to_string()
+            .contains("#EXT-X-SKIP:SKIPPED-SEGMENTS=2\n"));
+    }
+
+    #[test]
+    fn test_to_delta_update_raises_a_missing_or_low_version() {
+        use crate::m3u8::playlist::SkipRequest;
+
+        let body = "#EXT-X-TARGETDURATION:4\n#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24\n#EXT-X-MEDIA-SEQUENCE:0\n\
+#EXTINF:4,\na.ts\n#EXTINF:4,\nb.ts\n#EXTINF:4,\nc.ts\n#EXTINF:4,\nd.ts\n#EXTINF:4,\ne.ts\n#EXTINF:4,\nf.ts\n#EXTINF:4,\ng.ts\n";
+        for header in [
+            "#EXTM3U\n",
+            "#EXTM3U\n#EXT-X-VERSION:3\n",
+            "#EXTM3U\n#EXT-X-VERSION:12\n",
+        ] {
+            let full: Playlist = format!("{header}{body}").parse().unwrap();
+            let delta = full.to_delta_update(SkipRequest::Segments, &[]).unwrap();
+            let expected = if header.contains(":12") { 12 } else { 9 };
+            assert_eq!(
+                delta
+                    .tags
+                    .iter()
+                    .filter_map(|tag| match tag {
+                        Tag::ExtXVersion(version) => Some(*version),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>(),
+                [expected],
+                "{header:?}"
+            );
+            assert!(matches!(delta.tags[1], Tag::ExtXVersion(_)));
+            assert_eq!(delta.validate(), Ok(()));
+        }
+    }
+
+    #[test]
+    fn test_to_delta_update_declines_when_it_cannot_skip() {
+        use crate::m3u8::playlist::SkipRequest;
+
+        let long = |control: &str| -> Playlist {
+            let mut data = format!("#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n{control}#EXT-X-MEDIA-SEQUENCE:0\n");
+            for index in 0..10 {
+                data.push_str(&format!("#EXTINF:4,\n{index}.ts\n"));
+            }
+            data.parse().unwrap()
+        };
+        // The server does not advertise skipping at all.
+        assert_eq!(long("").to_delta_update(SkipRequest::Segments, &[]), None);
+        // It advertises skipping segments but not date ranges.
+        let segments_only = long("#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24\n");
+        assert!(segments_only
+            .to_delta_update(SkipRequest::Segments, &[])
+            .is_some());
+        assert_eq!(
+            segments_only.to_delta_update(SkipRequest::SegmentsAndDateRanges, &[]),
+            None
+        );
+        // A playlist that is already a delta update cannot be skipped again.
+        let delta = segments_only
+            .to_delta_update(SkipRequest::Segments, &[])
+            .unwrap();
+        assert_eq!(delta.to_delta_update(SkipRequest::Segments, &[]), None);
+        // Removed IDs that the attribute cannot hold.
+        let ranges = long("#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24,CAN-SKIP-DATERANGES=YES\n");
+        for bad in ["", "a\tb", "a\"b", "a\nb"] {
+            assert_eq!(
+                ranges.to_delta_update(SkipRequest::SegmentsAndDateRanges, &[bad]),
+                None,
+                "{bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_reload_response_follows_the_request() {
+        use crate::m3u8::playlist::{ReloadRequest, SkipRequest};
+
+        let mut data = String::from(
+            "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24,CAN-BLOCK-RELOAD=YES\n#EXT-X-MEDIA-SEQUENCE:0\n",
+        );
+        for index in 0..10 {
+            data.push_str(&format!("#EXTINF:4,\n{index}.ts\n"));
+        }
+        let full: Playlist = data.parse().unwrap();
+
+        let delta = full.reload_response(
+            &ReloadRequest::segment(9).with_skip(SkipRequest::Segments),
+            &[],
+        );
+        assert!(delta.to_string().contains("EXT-X-SKIP:SKIPPED-SEGMENTS=4"));
+        // No skip requested: the full playlist.
+        let plain = full.reload_response(&ReloadRequest::segment(9), &[]);
+        assert_eq!(plain.to_string(), full.to_string());
+        // Skip requested but not possible: the full playlist.
+        let unsupported = full.reload_response(
+            &ReloadRequest::default().with_skip(SkipRequest::SegmentsAndDateRanges),
+            &[],
+        );
+        assert_eq!(unsupported.to_string(), full.to_string());
+        // The client side of the same exchange.
+        let next = ReloadRequest {
+            skip: full.skip_request(),
+            ..full.next_reload_request()
+        };
+        assert_eq!(next.to_string(), "_HLS_msn=10&_HLS_skip=YES");
+        assert!(
+            full.apply_delta_update(&full.reload_response(&next, &[]))
+                .unwrap()
+                .to_string()
+                == full.to_string()
+        );
+    }
+
+    #[test]
     fn test_validate_rejects_strings_that_break_serialization() {
         let injected = PlaylistBuilder::new()
             .extm3u()
