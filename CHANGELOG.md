@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.0] - 2026-11-23
+
+### 🚀 Features
+
+- Add `Playlist::to_delta_update`, the inverse of `apply_delta_update`, which builds the Playlist Delta Update a server sends for an `_HLS_skip` request by replacing the segments older than `CAN-SKIP-UNTIL` with an `EXT-X-SKIP` tag
+- `SkipRequest::SegmentsAndDateRanges` also drops the skipped date ranges and writes `RECENTLY-REMOVED-DATERANGES`, and `EXT-X-VERSION` is raised to the level the delta needs
+- Add `Playlist::reload_response` to pick the delta update or the full playlist for a `ReloadRequest`
+
 ## [0.18.0] - 2026-11-23
 
 ### 🚀 Features
