@@ -37,6 +37,8 @@
 //! - `media_segments(&self) -> Vec<MediaSegment>`: Returns the media segments with their effective state.
 //! - `total_duration`, `variants`, `variants_by_bandwidth`, `renditions` and `renditions_in_group`: Read-only views over durations, variant streams and renditions.
 //! - `apply_delta_update(&self, delta: &Playlist) -> Result<Playlist, DeltaUpdateError>`: Merges a Playlist Delta Update (`EXT-X-SKIP`) into the previously loaded playlist.
+//! - `to_delta_update` and `reload_response`: Build the Playlist Delta Update a server sends for an `_HLS_skip` request.
+//! - `can_block_reload`, `can_skip_until`, `supports_skip`, `skip_request`, `next_reload_request` and `satisfies`: Blocking Playlist Reload and delta update requests (see `ReloadRequest`).
 //! - `pending_parts`, `pending_segment_sequence` and `latest_part_position`: Partial Segments of the segment in progress and the newest part's position.
 //! - `validate(&self) -> Result<(), Vec<ValidationError>>`: Validates the playlist according to RFC 8216, returning any validation errors.
 

@@ -26,6 +26,9 @@ by draft-pantos-hls-rfc8216bis.
   parses the `_HLS_msn`, `_HLS_part` and `_HLS_skip` query parameters, and
   `Playlist::next_reload_request`, `skip_request`, `satisfies`, `can_block_reload`
   and `can_skip_until` say what a playlist allows and what to request next
+- Server side of delta updates: `Playlist::to_delta_update` builds the
+  `EXT-X-SKIP` playlist for an `_HLS_skip` request, and `reload_response` picks
+  the delta or the full playlist for a request
 - Low-latency partial segments: `MediaSegment::parts`, `Playlist::pending_parts`
   and `Playlist::latest_part_position`
 - Convenience views: `total_duration`, `variants`, `variants_by_bandwidth`,
