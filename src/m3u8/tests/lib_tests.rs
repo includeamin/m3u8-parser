@@ -3,7 +3,7 @@ mod tests {
     use crate::m3u8::datetime::DateTime;
     use crate::m3u8::error::{ParseError, SubstitutionError, SyntaxError};
     use crate::m3u8::playlist::builder::PlaylistBuilder;
-    use crate::m3u8::playlist::Playlist;
+    use crate::m3u8::playlist::{PartPosition, Playlist};
     use crate::m3u8::tags::{
         AttributeValue, ByteRange, ClosedCaptions, Codecs, Define, HdcpLevel, HexSequence,
         InstreamId, Key, KeyMethod, LanguageTag, Map, MediaType, PlaylistType, PreloadHintType,
@@ -2922,6 +2922,316 @@ a.m3u8\n"
     }
 
     #[test]
+    fn test_reload_request_query_round_trip() {
+        use crate::m3u8::playlist::{ReloadRequest, SkipRequest};
+
+        let request = ReloadRequest::from_query("_HLS_msn=101&_HLS_part=2&_HLS_skip=v2").unwrap();
+        assert_eq!(
+            request,
+            ReloadRequest {
+                msn: Some(101),
+                part: Some(2),
+                skip: Some(SkipRequest::SegmentsAndDateRanges),
+            }
+        );
+        assert_eq!(request.to_string(), "_HLS_msn=101&_HLS_part=2&_HLS_skip=v2");
+        assert_eq!(
+            ReloadRequest::from_query("a=1&_HLS_skip=YES&_HLS_msn=7&b").unwrap(),
+            ReloadRequest::segment(7).with_skip(SkipRequest::Segments)
+        );
+        // Repeated directives: the last one wins.
+        assert_eq!(
+            ReloadRequest::from_query("_HLS_msn=1&_HLS_msn=2")
+                .unwrap()
+                .msn,
+            Some(2)
+        );
+        assert!(ReloadRequest::default().is_empty());
+        assert!(!ReloadRequest::segment(0).is_empty());
+        assert_eq!(ReloadRequest::default().to_string(), "");
+        assert_eq!(
+            ReloadRequest::from_query("").unwrap(),
+            ReloadRequest::default()
+        );
+        assert_eq!(
+            ReloadRequest::from(PartPosition {
+                sequence: 9,
+                part: 3
+            })
+            .to_string(),
+            "_HLS_msn=9&_HLS_part=3"
+        );
+    }
+
+    #[test]
+    fn test_reload_request_rejects_bad_directives() {
+        use crate::m3u8::error::ReloadRequestError;
+        use crate::m3u8::playlist::ReloadRequest;
+
+        for (query, parameter, value) in [
+            ("_HLS_msn=", "_HLS_msn", ""),
+            ("_HLS_msn=-1", "_HLS_msn", "-1"),
+            ("_HLS_msn=1.5", "_HLS_msn", "1.5"),
+            (
+                "_HLS_msn=99999999999999999999999",
+                "_HLS_msn",
+                "99999999999999999999999",
+            ),
+            ("_HLS_msn=1&_HLS_part=x", "_HLS_part", "x"),
+            ("_HLS_skip=NO", "_HLS_skip", "NO"),
+            ("_HLS_skip=yes", "_HLS_skip", "yes"),
+            ("_HLS_skip", "_HLS_skip", ""),
+        ] {
+            assert_eq!(
+                ReloadRequest::from_query(query),
+                Err(ReloadRequestError::InvalidValue {
+                    parameter: parameter.to_string(),
+                    value: value.to_string(),
+                }),
+                "{query}"
+            );
+        }
+        assert_eq!(
+            ReloadRequest::from_query("_HLS_part=1"),
+            Err(ReloadRequestError::PartWithoutMsn)
+        );
+        assert_eq!(
+            ReloadRequestError::PartWithoutMsn.to_string(),
+            "_HLS_part requires _HLS_msn"
+        );
+    }
+
+    #[test]
+    fn test_reload_request_uri_handling() {
+        use crate::m3u8::playlist::{ReloadRequest, SkipRequest};
+
+        let request = ReloadRequest {
+            msn: Some(5),
+            part: Some(1),
+            skip: Some(SkipRequest::Segments),
+        };
+        for (uri, expected) in [
+            (
+                "https://e.com/live.m3u8",
+                "https://e.com/live.m3u8?_HLS_msn=5&_HLS_part=1&_HLS_skip=YES",
+            ),
+            (
+                "https://e.com/live.m3u8?token=abc",
+                "https://e.com/live.m3u8?token=abc&_HLS_msn=5&_HLS_part=1&_HLS_skip=YES",
+            ),
+            (
+                "https://e.com/live.m3u8?_HLS_msn=1&token=abc&_HLS_skip=v2#frag",
+                "https://e.com/live.m3u8?token=abc&_HLS_msn=5&_HLS_part=1&_HLS_skip=YES#frag",
+            ),
+            (
+                "live.m3u8?",
+                "live.m3u8?_HLS_msn=5&_HLS_part=1&_HLS_skip=YES",
+            ),
+        ] {
+            assert_eq!(request.apply_to_uri(uri), expected);
+            assert_eq!(
+                ReloadRequest::from_uri(&request.apply_to_uri(uri)).unwrap(),
+                request
+            );
+        }
+        // An empty request strips the directives and leaves the rest alone.
+        assert_eq!(
+            ReloadRequest::default().apply_to_uri("a.m3u8?_HLS_msn=1#x"),
+            "a.m3u8#x"
+        );
+        assert_eq!(
+            ReloadRequest::default().apply_to_uri("a.m3u8?k=v"),
+            "a.m3u8?k=v"
+        );
+        assert_eq!(
+            ReloadRequest::from_uri("a.m3u8").unwrap(),
+            ReloadRequest::default()
+        );
+        // A directive after the fragment marker is not part of the query.
+        assert_eq!(
+            ReloadRequest::from_uri("a.m3u8#?_HLS_msn=3").unwrap(),
+            ReloadRequest::default()
+        );
+    }
+
+    #[test]
+    fn test_server_control_capabilities() {
+        use crate::m3u8::playlist::SkipRequest;
+
+        let playlist = |control: &str| -> Playlist {
+            format!("#EXTM3U\n#EXT-X-TARGETDURATION:4\n{control}#EXT-X-MEDIA-SEQUENCE:10\n#EXTINF:4,\na.ts\n")
+                .parse()
+                .unwrap()
+        };
+        let none = playlist("");
+        assert!(!none.can_block_reload());
+        assert_eq!(none.can_skip_until(), None);
+        assert!(!none.can_skip_dateranges());
+        assert!(!none.supports_skip(SkipRequest::Segments));
+        assert_eq!(none.skip_request(), None);
+
+        let basic = playlist("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,CAN-SKIP-UNTIL=24\n");
+        assert!(basic.can_block_reload());
+        assert_eq!(basic.can_skip_until(), Some(24.0));
+        assert!(basic.supports_skip(SkipRequest::Segments));
+        assert!(!basic.supports_skip(SkipRequest::SegmentsAndDateRanges));
+        assert_eq!(basic.skip_request(), Some(SkipRequest::Segments));
+
+        let full = playlist(
+            "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24,CAN-SKIP-DATERANGES=YES,CAN-BLOCK-RELOAD=NO\n",
+        );
+        assert!(!full.can_block_reload());
+        assert!(full.can_skip_dateranges());
+        assert_eq!(
+            full.skip_request(),
+            Some(SkipRequest::SegmentsAndDateRanges)
+        );
+
+        // Skipping date ranges without a Skip Boundary is not supported.
+        let no_boundary = playlist("#EXT-X-SERVER-CONTROL:CAN-SKIP-DATERANGES=YES\n");
+        assert_eq!(no_boundary.skip_request(), None);
+    }
+
+    #[test]
+    fn test_next_reload_request() {
+        use crate::m3u8::playlist::{ReloadRequest, SkipRequest};
+
+        let parse = |data: &str| -> Playlist { data.parse().unwrap() };
+        let head = "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,CAN-SKIP-UNTIL=24\n";
+
+        // Without parts: block on the next segment.
+        let plain = parse(&format!(
+            "{head}#EXT-X-MEDIA-SEQUENCE:100\n#EXTINF:4,\na.ts\n#EXTINF:4,\nb.ts\n"
+        ));
+        assert_eq!(plain.next_reload_request(), ReloadRequest::segment(102));
+
+        // With parts of an unfinished segment: block on the next part.
+        let parts = parse(&format!(
+            "{head}#EXT-X-PART-INF:PART-TARGET=1\n#EXT-X-MEDIA-SEQUENCE:100\n\
+#EXT-X-PART:DURATION=1,URI=\"a1.ts\"\n#EXT-X-PART:DURATION=1,URI=\"a2.ts\"\n#EXTINF:2,\na.ts\n\
+#EXT-X-PART:DURATION=1,URI=\"b1.ts\"\n#EXT-X-PART:DURATION=1,URI=\"b2.ts\"\n#EXT-X-PART:DURATION=1,URI=\"b3.ts\"\n"
+        ));
+        assert_eq!(
+            parts.next_reload_request(),
+            ReloadRequest {
+                msn: Some(101),
+                part: Some(3),
+                skip: None
+            }
+        );
+
+        // Parts but the last segment just completed: part 0 of the next segment.
+        let completed = parse(&format!(
+            "{head}#EXT-X-PART-INF:PART-TARGET=1\n#EXT-X-MEDIA-SEQUENCE:100\n\
+#EXT-X-PART:DURATION=1,URI=\"a1.ts\"\n#EXTINF:1,\na.ts\n"
+        ));
+        assert_eq!(
+            completed.next_reload_request(),
+            ReloadRequest {
+                msn: Some(101),
+                part: Some(0),
+                skip: None
+            }
+        );
+
+        // PART-INF but nothing yet.
+        let empty = parse(&format!(
+            "{head}#EXT-X-PART-INF:PART-TARGET=1\n#EXT-X-MEDIA-SEQUENCE:7\n"
+        ));
+        assert_eq!(
+            empty.next_reload_request(),
+            ReloadRequest {
+                msn: Some(7),
+                part: Some(0),
+                skip: None
+            }
+        );
+
+        // Combined with the server's strongest skip.
+        let request = ReloadRequest {
+            skip: plain.skip_request(),
+            ..plain.next_reload_request()
+        };
+        assert_eq!(request.to_string(), "_HLS_msn=102&_HLS_skip=YES");
+        assert_eq!(
+            request.with_skip(SkipRequest::SegmentsAndDateRanges).skip,
+            Some(SkipRequest::SegmentsAndDateRanges)
+        );
+
+        // No blocking reload, or an ended playlist: no directives.
+        let no_block = parse("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\na.ts\n");
+        assert!(no_block.next_reload_request().is_empty());
+        let ended = parse(&format!("{head}#EXTINF:4,\na.ts\n#EXT-X-ENDLIST\n"));
+        assert!(ended.next_reload_request().is_empty());
+    }
+
+    #[test]
+    fn test_playlist_satisfies_reload_request() {
+        use crate::m3u8::playlist::ReloadRequest;
+
+        let playlist: Playlist =
+            "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n#EXT-X-PART-INF:PART-TARGET=1\n\
+#EXT-X-MEDIA-SEQUENCE:100\n\
+#EXT-X-PART:DURATION=1,URI=\"a1.ts\"\n#EXTINF:1,\na.ts\n\
+#EXT-X-PART:DURATION=1,URI=\"b1.ts\"\n#EXT-X-PART:DURATION=1,URI=\"b2.ts\"\n"
+                .parse()
+                .unwrap();
+        let request = |msn, part| ReloadRequest {
+            msn,
+            part,
+            skip: None,
+        };
+        // No directives: always answered.
+        assert!(playlist.satisfies(&ReloadRequest::default()));
+        // Segment 100 is complete; segment 101 is still in progress.
+        assert!(playlist.satisfies(&request(Some(99), None)));
+        assert!(playlist.satisfies(&request(Some(100), None)));
+        assert!(!playlist.satisfies(&request(Some(101), None)));
+        // Parts of the segment in progress: it has parts 0 and 1.
+        assert!(playlist.satisfies(&request(Some(101), Some(0))));
+        assert!(playlist.satisfies(&request(Some(101), Some(1))));
+        assert!(!playlist.satisfies(&request(Some(101), Some(2))));
+        assert!(!playlist.satisfies(&request(Some(102), Some(0))));
+        // A part of a completed segment is satisfied by the segment.
+        assert!(playlist.satisfies(&request(Some(100), Some(5))));
+
+        let empty: Playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:5\n"
+            .parse()
+            .unwrap();
+        assert!(!empty.satisfies(&request(Some(5), None)));
+        assert!(!empty.satisfies(&request(Some(5), Some(0))));
+
+        let ended: Playlist =
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST\n"
+                .parse()
+                .unwrap();
+        assert!(ended.satisfies(&request(Some(500), Some(3))));
+
+        // The request a client makes next is not yet satisfied by the playlist
+        // it was built from.
+        let live: Playlist =
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES\n\
+#EXT-X-PART-INF:PART-TARGET=1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PART:DURATION=1,URI=\"a1.ts\"\n"
+                .parse()
+                .unwrap();
+        assert!(!live.satisfies(&live.next_reload_request()));
+    }
+
+    #[test]
+    fn test_validate_can_skip_until_is_six_target_durations() {
+        let playlist = |skip_until: u32| -> Playlist {
+            format!("#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL={skip_until}\n#EXTINF:4,\na.ts\n")
+                .parse()
+                .unwrap()
+        };
+        assert_eq!(playlist(24).validate(), Ok(()));
+        assert!(matches!(
+            playlist(23).validate().unwrap_err().as_slice(),
+            [ValidationError::InvalidServerControl(reason)] if reason.contains("CAN-SKIP-UNTIL")
+        ));
+    }
+
+    #[test]
     fn test_validate_rejects_strings_that_break_serialization() {
         let injected = PlaylistBuilder::new()
             .extm3u()
@@ -3441,7 +3751,6 @@ lo2.m3u8\n"
 
     #[test]
     fn test_partial_segments() {
-        use crate::m3u8::playlist::PartPosition;
         let header = "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:4\n\
 #EXT-X-PART-INF:PART-TARGET=1\n#EXT-X-MEDIA-SEQUENCE:20\n";
         let playlist: Playlist = format!(

@@ -44,6 +44,7 @@ pub mod builder;
 mod delta;
 mod helpers;
 mod parts;
+mod reload;
 mod resolve;
 mod variables;
 
@@ -76,6 +77,7 @@ pub struct Playlist {
 
 pub use helpers::{Rendition, Variant};
 pub use parts::{Part, PartPosition};
+pub use reload::{ReloadRequest, SkipRequest};
 
 /// A media segment and the state established by preceding Media Playlist tags.
 #[derive(Debug, PartialEq, Clone)]
@@ -530,6 +532,7 @@ impl Playlist {
         });
         for tag in &self.tags {
             let Tag::ExtXServerControl {
+                can_skip_until,
                 hold_back,
                 part_hold_back,
                 ..
@@ -537,6 +540,14 @@ impl Playlist {
             else {
                 continue;
             };
+            if let (Some(can_skip_until), Some(target)) = (can_skip_until, target_duration) {
+                if *can_skip_until < 6.0 * target {
+                    errors.push(ValidationError::InvalidServerControl(
+                        "CAN-SKIP-UNTIL must be at least six times EXT-X-TARGETDURATION"
+                            .to_string(),
+                    ));
+                }
+            }
             if let (Some(hold_back), Some(target)) = (hold_back, target_duration) {
                 if *hold_back < 3.0 * target {
                     errors.push(ValidationError::InvalidServerControl(
